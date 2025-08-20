@@ -1,5 +1,5 @@
 // ---------------- Map Init ----------------
-const map = L.map('map').setView([12.9716, 77.5946], 15);
+const map = L.map('map').setView([8.56235599179857, 76.858811986419], 15);
 
 // Dark theme tiles (Carto dark basemap)
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -30,11 +30,11 @@ map.whenReady(reflowMap);
 
 // ---------------- Data ----------------
 let poles = [
-  {id:1, name:"Pole 1", coords:[12.972, 77.594]},
-  {id:2, name:"Pole 2", coords:[12.9722, 77.595]},
-  {id:3, name:"Pole 3", coords:[12.9725, 77.596]},
-  {id:4, name:"Pole 4", coords:[12.9727, 77.597]},
-  {id:5, name:"Pole 5", coords:[12.9730, 77.598]},
+  {id:1, name:"Pole 1", coords:[8.561121456920256, 76.857288741109]},
+  {id:2, name:"Pole 2", coords:[8.561406528979926, 76.85769082321161]},
+  {id:3, name:"Pole 3", coords:[8.561952872142548, 76.85843646112221]},
+  {id:4, name:"Pole 4", coords:[8.562446202520935, 76.8590480003807]},
+  {id:5, name:"Pole 5", coords:[8.56333738027111, 76.8599009400019]},
 ];
 let markers = {};
 let lines = [];
