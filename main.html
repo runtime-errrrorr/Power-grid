@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SCADA Distribution GUI</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+
+<!-- Side Panel (now on the left) -->
+<div id="sidePanel">
+  <h2>Pole Details</h2>
+  <div id="poleInfo">Click a pole to see details.</div>
+  <h3>Event Timeline</h3>
+  <div id="eventLog"></div>
+  <button onclick="simulateFault()">⚡ Simulate Fault</button>
+  <button onclick="reset()">🔄 Reset System</button>
+</div>
+
+<!-- Main Content Area -->
+<div id="mainContent">
+  <header>
+    <button id="hamburger-btn">☰</button>
+    <span>SCADA Grid Overview</span>
+  </header>
+  <div id="map"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="main.js"></script>
+</body>
+</html>

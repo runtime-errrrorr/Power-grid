@@ -1,0 +1,183 @@
+/* --- Base Layout & Theming --- */
+:root {
+  --bg: #0f1115;
+  --panel: #0b0d11;
+  --border: rgba(255, 255, 255, 0.06);
+  --text: #e6e7ea;
+  --muted: #9aa4b2;
+  --accent: #6bc1ff;
+  --ok: #4caf50;
+  --warn: #ffc107;
+  --err: #f44336;
+  --header-h: 56px;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+  width: 100vw;
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+  display: flex;
+  flex-direction: row;
+  overflow: hidden; /* Prevent body from scrolling */
+}
+
+/* --- Side Panel --- */
+#sidePanel {
+  width: 350px;
+  flex-shrink: 0; /* Prevent panel from shrinking */
+  height: 100%;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  z-index: 10;
+  transition: transform 0.3s ease-in-out;
+}
+
+#sidePanel h2 {
+  margin: 0 0 10px 0;
+  font-size: 18px;
+  color: var(--accent);
+  font-weight: 600;
+}
+
+#sidePanel h3 {
+  margin-top: 16px;
+  font-size: 13px;
+  color: var(--muted);
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+#poleInfo {
+  background: #111419;
+  padding: 10px;
+  border-radius: 10px;
+  min-height: 100px;
+  border: 1px solid var(--border);
+}
+
+#eventLog {
+  background: #111419;
+  padding: 8px;
+  font-size: 12px;
+  flex-grow: 1;
+  overflow-y: auto;
+  margin-top: 8px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+}
+
+/* --- Main Content Area (Header + Map) --- */
+#mainContent {
+  flex-grow: 1;         /* ✅ This makes it fill the remaining width */
+  min-width: 0;         /* ✅ This prevents content from causing overflow */
+  height: 100vh;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+header {
+  height: var(--header-h);
+  flex-shrink: 0;      /* Prevent header from shrinking */
+  background: var(--panel);
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  border-bottom: 1px solid var(--border);
+  z-index: 5;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 600;
+}
+
+#map {
+  width: 100%;        /* Fill the parent (#mainContent) horizontally */
+  flex-grow: 1;       /* ✅ This makes it fill the remaining vertical space */
+  z-index: 1;
+}
+
+/* --- Controls & Buttons --- */
+button {
+  background: transparent;
+  color: var(--text);
+  padding: 10px 12px;
+  border: 1px solid var(--border);
+  margin-top: 12px;
+  cursor: pointer;
+  border-radius: 10px;
+  width: 100%;
+  font-weight: 600;
+  transition: background 0.2s ease, border-color 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+button:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+#hamburger-btn {
+  display: none; /* Hidden by default on larger screens */
+  background: none;
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  margin-right: 16px;
+  padding: 0;
+  width: auto;
+  margin-top: 0;
+}
+
+/* --- Leaflet & Status Colors --- */
+.leaflet-container {
+  background: var(--bg);
+}
+
+.leaflet-control-zoom a {
+  background: var(--panel) !important;
+  color: var(--text) !important;
+  border: 1px solid var(--border) !important;
+}
+
+.status-green { color: var(--ok); }
+.status-yellow { color: var(--warn); }
+.status-red { color: var(--err); }
+
+/* --- Responsive Design for smaller screens --- */
+@media (max-width: 768px) {
+  #sidePanel {
+    position: absolute;
+    top: 0;
+    left: 0;
+    transform: translateX(-100%);
+    box-shadow: 2px 0 10px rgba(0,0,0,0.3);
+  }
+
+  #sidePanel.open {
+    transform: translateX(0);
+  }
+
+  #hamburger-btn {
+    display: block;
+  }
+}
