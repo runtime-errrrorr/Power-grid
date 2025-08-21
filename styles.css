@@ -181,3 +181,24 @@ button:hover {
     display: block;
   }
 }
+
+.alert-banner {
+  position: fixed;
+  top: 20px;
+  right: -400px; /* hidden off screen */
+  background: #f44336;
+  color: white;
+  padding: 15px 25px;
+  border-radius: 6px;
+  font-weight: bold;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  transition: right 0.5s ease-in-out, opacity 0.5s ease-in-out;
+  opacity: 0;
+  z-index: 9999;
+  display: none; /* fully hidden by default */
+}
+.alert-banner.show {
+  right: 20px;   /* slide into view */
+  opacity: 1;
+  display: block;
+}

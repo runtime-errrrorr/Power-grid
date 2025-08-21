@@ -1,5 +1,5 @@
 // ---------------- Map Init ----------------
-const map = L.map('map').setView([8.56235599179857, 76.858811986419], 15);
+const map = L.map('map').setView([8.56235599179857, 76.858811986419], 17);
 
 // Dark theme tiles (Carto dark basemap)
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
@@ -95,7 +95,7 @@ function showPole(p) {
     <div><b>Current:</b> ${data.current} A</div>
     <div><b>Fault Code:</b> ${data.fault_code}</div>
     <div><b>Fault Type:</b> ${data.fault_type}</div>
-    <div><b>Breaker:</b> ${data.breaker_status}</div>
+    <div><b>Breaker:</b> <span style="color:${data.breaker_status === "OPEN" ? "#f44336" : "#4caf50"};">${data.breaker_status}</span></div>
     <div style="font-size:12px; color:#aaa;">Last update: ${new Date(data.timestamp).toLocaleTimeString()}</div>
   `;
 }
@@ -107,11 +107,16 @@ function statusColor(status) {
 }
 
 function updatePoleStatus(data) {
-  const { pole_id, status } = data;
-  if (!pole_id) return;
+  const pole_id = data.pole_id;
+  const status = data.status || "OK"; // fallback
 
-  // Store latest data
-  poleData[pole_id] = data;
+  if (!pole_id) {
+    console.warn("Invalid data received, missing pole_id:", data);
+    return;
+  }
+
+  // Store the latest data (merge with defaults)
+  poleData[pole_id] = { ...poleData[pole_id], ...data };
 
   // Update marker color
   if (markers[pole_id]) {
@@ -128,20 +133,42 @@ function updatePoleStatus(data) {
     }
   });
 
+  // Update global system indicator
+  updateSystemStatus(status);
+
   // Log the event
   logEvent(
     `${status} @ Pole ${pole_id}: ${data.fault_type || "Normal"}`,
-    status === "FAULT" ? "fault" : status === "WARNING" ? "warn" : "info"
+    status === "FAULT" ? "fault" : status === "WARNING" ? "warn" : "info",
+    data
   );
+
+  // Show banner if fault
+  if (status === "FAULT") {
+    showAlert(`⚡ ${data.fault_type} detected at Pole ${pole_id} — Breaker: ${data.breaker_status}`);
+  }
 }
 
-function logEvent(msg, type = 'info') {
+function logEvent(msg, type = 'info', data = null) {
   let color = '#e0e0e0';
   if (type === 'fault') color = '#f44336';
   if (type === 'warn') color = '#ffc107';
-  
-  eventLogEl.innerHTML += `<span style="color: ${color};">${new Date().toLocaleTimeString()}: ${msg}</span><br>`;
-  eventLogEl.scrollTop = eventLogEl.scrollHeight;
+
+  // table log (if present)
+  const logTable = document.getElementById("eventLogTable");
+  if (logTable && data) {
+    let row = `<tr style="color:${color}">
+      <td>${new Date(data.timestamp).toLocaleTimeString()}</td>
+      <td>${data.fault_type || "-"}</td>
+      <td>${data.pole_id ? "Pole " + data.pole_id : "-"}</td>
+      <td>${msg}</td>
+    </tr>`;
+    logTable.innerHTML += row;
+  } else {
+    // fallback text log
+    eventLogEl.innerHTML += `<span style="color: ${color};">${new Date().toLocaleTimeString()}: ${msg}</span><br>`;
+    eventLogEl.scrollTop = eventLogEl.scrollHeight;
+  }
 }
 
 function reset() {
@@ -151,7 +178,75 @@ function reset() {
     markers[id].setStyle({color:"#4caf50", fillColor:"#4caf50"});
   }
   lines.forEach(l=> l.line.setStyle({color:"#4caf50"}));
+  updateSystemStatus("OK");
   logEvent("System reset. All systems normal.");
+}
+
+function updateSystemStatus(status) {
+  const light = document.getElementById("status-light");
+  const text = document.getElementById("status-text");
+  if (!light || !text) return;
+
+  text.innerText = status;
+  if (status === "FAULT") {
+    light.style.background = "#f44336"; 
+    text.style.color = "#f44336";
+  } else if (status === "WARNING") {
+    light.style.background = "#ffc107"; 
+    text.style.color = "#ffc107";
+  } else {
+    light.style.background = "#4caf50"; 
+    text.style.color = "#4caf50";
+  }
+}
+
+function showAlert(msg) {
+  const banner = document.getElementById("alertBanner");
+  banner.innerText = msg;
+  banner.style.display = "block"; // ensure it's visible for animation
+
+  // Trigger reflow (forces browser to apply new styles)
+  void banner.offsetWidth;
+
+  banner.classList.add("show");
+
+  // Auto-hide after 5s
+  setTimeout(() => {
+    banner.classList.remove("show");
+
+    // Wait for animation to finish, then hide completely
+    setTimeout(() => {
+      banner.style.display = "none";
+    }, 500); // match CSS transition time
+  }, 5000);
+}
+
+
+function sendReset() {
+  client.publish("scada/grid/hashim/control", JSON.stringify({ command: "reset" }));
+  logEvent("Breaker reset command sent.", "info");
+}
+
+function acknowledgeAlarm() {
+  let banner = document.getElementById("alertBanner");
+  if (banner) banner.classList.add("hidden");
+  logEvent("Alarm acknowledged by operator.", "info");
+}
+
+function simulateFault(type = "Overcurrent") {
+  let randPole = poles[Math.floor(Math.random()*poles.length)];
+  let fake = {
+    pole_id: randPole.id,
+    substation_id: "S01",
+    voltage: type === "Overcurrent" ? 260 : 180,
+    current: type === "Overcurrent" ? 150 : 80,
+    fault_code: type === "Overcurrent" ? 51 : 27,
+    fault_type: type,
+    status: "FAULT",
+    breaker_status: "OPEN",
+    timestamp: Date.now()
+  };
+  updatePoleStatus(fake);
 }
 
 
@@ -175,15 +270,19 @@ const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
 
 client.on('connect', () => {
   console.log("✅ Connected to HiveMQ Broker");
-  client.subscribe("scada/grid/hashim/#"); // use your own namespace to avoid collisions
+  client.subscribe("scada/grid/hashim/#"); // use your own namespace
 });
 
 client.on('message', (topic, message) => {
   try {
     const data = JSON.parse(message.toString());
+    if (!data.pole_id) {
+      console.warn("⚠️ Ignored message: missing pole_id", data);
+      return;
+    }
     updatePoleStatus(data);
   } catch (err) {
-    console.error("❌ Invalid MQTT message", err);
+    console.error("❌ Invalid MQTT message", err, message.toString());
   }
 });
 
