@@ -174,6 +174,17 @@ function logEvent(msg, type = 'info', data = null) {
 function reset() {
   eventLogEl.innerHTML = "";
   poleInfoEl.innerHTML = "Click a pole to see details.";
+  for (let id in poleData) {
+    poleData[id] = {
+      voltage: "---",
+      current: "---",
+      fault_code: "---",
+      fault_type: "---",
+      status: "OK",
+      breaker_status: "---",
+      timestamp: Date.now()
+    };
+  }
   for (let id in markers) {
     markers[id].setStyle({color:"#4caf50", fillColor:"#4caf50"});
   }
