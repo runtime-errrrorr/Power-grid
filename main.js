@@ -545,10 +545,31 @@ function clearAnalyticsData() {
   }
 }
 
+function showAnalytics() {
+  const block = document.getElementById('analyticsBlock');
+  analyticsVisible = true;
+  block.style.display = "block";
+  updateViewGraphButton();
+}
+
 function toggleAnalytics() {
   const block = document.getElementById('analyticsBlock');
   analyticsVisible = !analyticsVisible;
   block.style.display = analyticsVisible ? "block" : "none";
+  updateViewGraphButton();
+}
+
+function updateViewGraphButton() {
+  const btn = document.getElementById('viewGraphBtn');
+  if (btn) {
+    if (analyticsVisible) {
+      btn.textContent = "📉 Hide Graph";
+      btn.onclick = () => toggleAnalytics();
+    } else {
+      btn.textContent = "📈 View Graph";
+      btn.onclick = () => showAnalytics();
+    }
+  }
 }
 
 function setupResizeHandler() {
@@ -647,3 +668,4 @@ client.on("message", (topic, message) => {
 addPoles();
 initializeAnalytics();
 reset();
+updateViewGraphButton();
