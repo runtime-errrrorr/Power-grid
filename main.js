@@ -32,6 +32,7 @@ let lines = [];            // [{ids:[a,b], line:L.Polyline}]
 let poleData = {};         // telemetry per pole
 let faultIcons = {};       // poleId -> overlay icon marker
 let selectedPoleId = null; // last clicked pole
+let substationOnline = true; // Track substation state
 
 // Analytics data storage
 let analyticsData = {
@@ -572,6 +573,53 @@ function updateViewGraphButton() {
   }
 }
 
+function toggleSubstation() {
+  substationOnline = !substationOnline;
+  
+  // Update button text and appearance
+  const btn = document.getElementById('substationToggleBtn');
+  if (btn) {
+    if (substationOnline) {
+      btn.textContent = "🔌 Toggle Substation";
+      btn.style.background = "rgba(255, 255, 255, 0.04)";
+      btn.style.borderColor = "rgba(255, 255, 255, 0.12)";
+    } else {
+      btn.textContent = "⚡ Substation OFF";
+      btn.style.background = "rgba(244, 67, 54, 0.2)";
+      btn.style.borderColor = "#f44336";
+    }
+  }
+  
+  // Send MQTT message
+  const message = {
+    command: "substation_toggle",
+    substation_id: SUBSTATION_ID,
+    status: substationOnline ? "ONLINE" : "OFFLINE",
+    timestamp: Date.now()
+  };
+  
+  client.publish("scada/commands/substation", JSON.stringify(message));
+  
+  // Update visual state
+  if (substationOnline) {
+    // Bring substation back online
+    setPoleColor(SUBSTATION_ID, COLOR.OK, { includeLines: false });
+    [1, 2, 3, 4].forEach(id => setPoleColor(id, COLOR.OK));
+    lines.forEach(Lobj => Lobj.line.setStyle({ color: COLOR.OK }));
+    logEvent("Substation brought back online", "info");
+    showAlert("✅ Substation brought back online");
+    updateSystemStatus("OK");
+  } else {
+    // Take substation offline
+    setPoleColor(SUBSTATION_ID, COLOR.OFF, { includeLines: false });
+    [1, 2, 3, 4].forEach(id => setPoleColor(id, COLOR.OFF));
+    lines.forEach(Lobj => Lobj.line.setStyle({ color: COLOR.OFF }));
+    logEvent("Substation taken offline", "warn");
+    showAlert("⚠️ Substation taken offline");
+    updateSystemStatus("WARNING");
+  }
+}
+
 function setupResizeHandler() {
   const block = document.getElementById('analyticsBlock');
   const handle = block.querySelector('.resize-handle');
@@ -642,6 +690,16 @@ function reset() {
     };
     clearPoleFaultIcon(p.id);
   });
+  
+  // Reset substation state
+  substationOnline = true;
+  const substationBtn = document.getElementById('substationToggleBtn');
+  if (substationBtn) {
+    substationBtn.textContent = "🔌 Toggle Substation";
+    substationBtn.style.background = "rgba(255, 255, 255, 0.04)";
+    substationBtn.style.borderColor = "rgba(255, 255, 255, 0.12)";
+  }
+  
   updateSystemStatus("OK");
   eventLogEl.innerHTML = "";
   logEvent("System Reset");
@@ -669,3 +727,11 @@ addPoles();
 initializeAnalytics();
 reset();
 updateViewGraphButton();
+
+// Initialize substation button state
+const substationBtn = document.getElementById('substationToggleBtn');
+if (substationBtn) {
+  substationBtn.textContent = "🔌 Toggle Substation";
+  substationBtn.style.background = "rgba(255, 255, 255, 0.04)";
+  substationBtn.style.borderColor = "rgba(255, 255, 255, 0.12)";
+}
