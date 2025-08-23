@@ -1,4 +1,4 @@
-// ---------------- Map Init ----------------
+// ========================== Map Init ==========================
 const map = L.map('map').setView([8.56235599179857, 76.858811986419], 17);
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
   attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
@@ -6,27 +6,32 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
   maxZoom: 19
 }).addTo(map);
 
-// ---------------- Data ----------------
+// ========================== Data ==============================
 const COLOR = {
   OK: "#4caf50",
   WARNING: "#ffc107",
   NEUTRAL_DARK: "#b58900",
   FAULT: "#f44336",
-  OFF: "#9e9e9e"
+  OFF: "#9e9e9e",
+  OVERVOLT: "#00bfff",   // bright cyan (fast)
+  UNDERVOLT: "#1e90ff"   // dimmer blue (slow)
 };
 
-let poles = [
-  {id:1, name:"Pole 1", coords:[8.561121456920256, 76.857288741109]},
-  {id:2, name:"Pole 2", coords:[8.561406528979926, 76.85769082321161]},
-  {id:3, name:"Pole 3", coords:[8.561952872142548, 76.85843646112221]},
-  {id:4, name:"Pole 4", coords:[8.562446202520935, 76.8590480003807]},
-  {id:5, name:"Substation", coords:[8.56333738027111, 76.8599009400019]}, // hardcoded substation
+const SUBSTATION_ID = 5;
+
+const poles = [
+  { id: 1, name: "Pole 1", coords: [8.561121456920256, 76.857288741109] },
+  { id: 2, name: "Pole 2", coords: [8.561406528979926, 76.85769082321161] },
+  { id: 3, name: "Pole 3", coords: [8.561952872142548, 76.85843646112221] },
+  { id: 4, name: "Pole 4", coords: [8.562446202520935, 76.8590480003807] },
+  { id: SUBSTATION_ID, name: "Substation", coords: [8.56333738027111, 76.8599009400019] }
 ];
 
-let markers = {};
-let lines = [];
-let poleData = {};
-let selectedPoleId = null; // last-clicked pole id for simulateFault()
+let markers = {};          // poleId -> Leaflet marker
+let lines = [];            // [{ids:[a,b], line:L.Polyline}]
+let poleData = {};         // telemetry per pole
+let faultIcons = {};       // poleId -> overlay icon marker
+let selectedPoleId = null; // last clicked pole
 
 // Analytics data storage
 let analyticsData = {
@@ -36,7 +41,7 @@ let analyticsData = {
   maxDataPoints: 50
 };
 
-// init with default placeholder values
+// init defaults
 poles.forEach(p => {
   poleData[p.id] = {
     voltage: "---",
@@ -47,247 +52,142 @@ poles.forEach(p => {
     breaker_status: "---",
     timestamp: Date.now()
   };
-  
-  // Initialize analytics data for each pole
   analyticsData.voltageData[p.id] = [];
   analyticsData.currentData[p.id] = [];
 });
 
-// ---------------- Helpers ----------------
-function statusColor(status, faultType) {
-  if (status === "FAULT") {
-    if (faultType === "NeutralFault") return COLOR.NEUTRAL_DARK; // darker yellow for origin
-    return COLOR.FAULT;
-  }
-  if (status === "WARNING") return COLOR.WARNING;
-  if (status === "OFF") return COLOR.OFF;
-  return COLOR.OK;
+// ========================== DOM refs ==========================
+const eventLogEl = document.getElementById('eventLog');
+const poleInfoEl = document.getElementById('poleInfo');
+const sidePanel = document.getElementById('sidePanel');
+const hamburgerBtn = document.getElementById('hamburger-btn');
+if (hamburgerBtn && sidePanel) {
+  hamburgerBtn.addEventListener('click', () => sidePanel.classList.toggle('open'));
 }
 
-// sets marker + connected lines color
-function setPoleColor(id, color) {
+// ========================== Utilities =========================
+function downstreamIds(fromId) {
+  const ids = [];
+  for (let i = fromId - 1; i >= 1; i--) ids.push(i);
+  return ids;
+}
+
+function getPoleMarkerEl(id) {
+  const m = markers[id];
+  if (!m) return null;
+  const el = m.getElement && m.getElement();
+  if (!el) return null;
+  if (id === SUBSTATION_ID) {
+    return el.querySelector('.triangle-marker') || el;
+  }
+  return el; // for circleMarker, this is the <path> element
+}
+
+function getLineEl(lineObj) {
+  if (!lineObj || !lineObj.line) return null;
+  return lineObj.line.getElement && lineObj.line.getElement();
+}
+
+function addClass(el, cls) { if (el) el.classList.add(cls); }
+function removeClass(el, cls) { if (el) el.classList.remove(cls); }
+
+function setPoleColor(id, color, { borderOnly = false, includeLines = true } = {}) {
   const m = markers[id];
   if (!m) return;
 
-  // Circle markers (poles 1-4) use setStyle
   if (m.setStyle) {
+    if (borderOnly) {
+      m.setStyle({ color, fillColor: COLOR.OK }); // keep fill green
+    } else {
     m.setStyle({ color, fillColor: color });
+    }
   } else {
-    // Substation (DivIcon with .triangle-marker)
-    const el = m.getElement && m.getElement();
-    if (el) {
-      const tri = el.querySelector(".triangle-marker");
-      if (tri) tri.style.borderBottomColor = color;
-      // optional: tweak thunder color for contrast (white on red/gray)
-      const thunder = el.querySelector(".thunder-icon");
+    const el = getPoleMarkerEl(id);
+    if (el && el.classList.contains('triangle-marker')) {
+      el.style.borderBottomColor = color;
+    }
+    const root = m.getElement && m.getElement();
+    if (root) {
+      const thunder = root.querySelector(".thunder-icon");
       if (thunder) {
         thunder.style.filter = (color === COLOR.FAULT || color === COLOR.OFF) ? "invert(1)" : "none";
       }
     }
   }
 
-  // Recolor all lines that include this id
+  if (includeLines) {
   lines.forEach(l => {
     if (l.ids.includes(id)) l.line.setStyle({ color });
   });
-}
-
-function grayDownstream(fromId) {
-  // downstream relative to substation(5) is decreasing ids
-  for (let i = fromId - 1; i >= 1; i--) {
-    setPoleColor(i, COLOR.OFF);
-    poleData[i].status = "OFF";
   }
 }
 
-// ---------------- UI ----------------
-const eventLogEl = document.getElementById('eventLog');
-const poleInfoEl = document.getElementById('poleInfo');
-const sidePanel = document.getElementById('sidePanel');
-const hamburgerBtn = document.getElementById('hamburger-btn');
-
-// Analytics elements
-let voltageChart, currentChart;
-let analyticsVisible = true;
-
-
-// ---------------- Functions ----------------
-function addPoles() {
-  for (let i=0; i<poles.length; i++) {
-    let p = poles[i];
-    let marker = L.circleMarker(p.coords, {
-      radius: 9,
-      color: "#4caf50",
-      fillColor: "#4caf50",
-      fillOpacity: 0.9
-    }).addTo(map);
-    marker.bindTooltip(p.name, {permanent:false});
-    marker.on('click', () => {
-      showPole(p);
-      if (window.innerWidth <= 768) {
-        sidePanel.classList.add('open');
-      }
-    });
-    markers[p.id] = marker;
-
-    // connect with previous pole
-    if (i > 0) {
-      let prev = poles[i-1];
-      let line = L.polyline([prev.coords, p.coords], {color:"#4caf50", weight:4, opacity:0.8}).addTo(map);
-      lines.push({ids:[prev.id,p.id], line});
-    }
-  }
+function clearAllColors() {
+  poles.forEach(p => setPoleColor(p.id, COLOR.OK));
+  lines.forEach(Lobj => Lobj.line.setStyle({ color: COLOR.OK }));
 }
 
-function showPole(p) {
-  const data = poleData[p.id] || {};
-  poleInfoEl.innerHTML = `
-    <h3 style="margin-bottom:5px; color:#4db6ff;">${p.name}</h3>
-    <div><b>Status:</b> <span style="color:${statusColor(data.status)}">${data.status}</span></div>
-    <div><b>Voltage:</b> ${data.voltage} V</div>
-    <div><b>Current:</b> ${data.current} A</div>
-    <div><b>Fault Code:</b> ${data.fault_code}</div>
-    <div><b>Fault Type:</b> ${data.fault_type}</div>
-    <div><b>Breaker:</b> <span style="color:${data.breaker_status === "OPEN" ? "#f44336" : "#4caf50"};">${data.breaker_status}</span></div>
-    <div style="font-size:12px; color:#aaa;">Last update: ${new Date(data.timestamp).toLocaleTimeString()}</div>
-  `;
-}
-
-function statusColor(status) {
-  if (status === "FAULT") return "#f44336";   // red
-  if (status === "WARNING") return "#ffc107"; // yellow
-  return "#4caf50";                           // green
-}
-
-function updatePoleStatus(data) {
-  const pole_id = data.pole_id;
-  const status = data.status || "OK"; // fallback
-
-  if (!pole_id) {
-    console.warn("Invalid data received, missing pole_id:", data);
-    return;
+function clearPoleFaultIcon(poleId) {
+  const overlay = faultIcons[poleId];
+  if (overlay) {
+    map.removeLayer(overlay);
+    delete faultIcons[poleId];
   }
-
-  // Store the latest data (merge with defaults)
-  poleData[pole_id] = { ...poleData[pole_id], ...data };
-
-  // Add data to analytics
-  addAnalyticsData(pole_id, data.voltage, data.current);
-
-  // Update marker color
-  if (markers[pole_id]) {
-    markers[pole_id].setStyle({
-      color: statusColor(status),
-      fillColor: statusColor(status)
-    });
-  }
-
-  // Update line color
-  lines.forEach(l => {
-    if (l.ids.includes(pole_id)) {
-      l.line.setStyle({ color: statusColor(status) });
-    }
+}
+function setPoleFaultIcon(poleId, svgPath) {
+  clearPoleFaultIcon(poleId);
+  const p = poles.find(x => x.id === poleId);
+  if (!p) return;
+  const icon = L.divIcon({
+    className: "fault-icon",
+    html: `<img src="${svgPath}" style="width:16px;height:16px;" />`,
+    iconSize: [16, 16],
+    iconAnchor: [8, 8]
   });
-
-  // Update global system indicator
-  updateSystemStatus(status);
-
-  // Log the event
-  logEvent(
-    `${status} @ Pole ${pole_id}: ${data.fault_type || "Normal"}`,
-    status === "FAULT" ? "fault" : status === "WARNING" ? "warn" : "info",
-    data
-  );
-
-  // Show banner if fault
-  if (status === "FAULT") {
-    showAlert(`⚡ ${data.fault_type} detected at Pole ${pole_id} — Breaker: ${data.breaker_status}`);
-  }
+  const overlay = L.marker(p.coords, { icon, interactive: false, pane: 'markerPane' }).addTo(map);
+  faultIcons[poleId] = overlay;
 }
 
-function logEvent(msg, type = 'info', data = null) {
-  let color = '#e0e0e0';
-  if (type === 'fault') color = '#f44336';
-  if (type === 'warn') color = '#ffc107';
-
-  // table log (if present)
-  const logTable = document.getElementById("eventLogTable");
-  if (logTable && data) {
-    let row = `<tr style="color:${color}">
-      <td>${new Date(data.timestamp).toLocaleTimeString()}</td>
-      <td>${data.fault_type || "-"}</td>
-      <td>${data.pole_id ? "Pole " + data.pole_id : "-"}</td>
-      <td>${msg}</td>
-    </tr>`;
-    logTable.innerHTML += row;
-  } else {
-    // fallback text log
-    eventLogEl.innerHTML += `<span style="color: ${color};">${new Date().toLocaleTimeString()}: ${msg}</span><br>`;
-    eventLogEl.scrollTop = eventLogEl.scrollHeight;
-  }
+function clearAllFaultIcons() {
+  Object.keys(faultIcons).forEach(id => clearPoleFaultIcon(+id));
 }
 
-function reset() {
-  eventLogEl.innerHTML = "";
-  poleInfoEl.innerHTML = "Click a pole to see details.";
-  for (let id in poleData) {
-    poleData[id] = {
-      voltage: "---",
-      current: "---",
-      fault_code: "---",
-      fault_type: "---",
-      status: "OK",
-      breaker_status: "---",
-      timestamp: Date.now()
-    };
-  }
-  for (let id in markers) {
-    markers[id].setStyle({color:"#4caf50", fillColor:"#4caf50"});
-  }
-  lines.forEach(l=> l.line.setStyle({color:"#4caf50"}));
-  updateSystemStatus("OK");
-  logEvent("System reset. All systems normal.");
-  
-  // Clear analytics data
-  clearAnalyticsData();
-}
-
-function clearAnalyticsData() {
-  analyticsData.timestamps = [];
-  Object.keys(analyticsData.voltageData).forEach(id => {
-    analyticsData.voltageData[id] = [];
+function removeOverUnderClasses() {
+  poles.forEach(p => {
+    const el = getPoleMarkerEl(p.id);
+    removeClass(el, 'overvoltage-pole');
+    removeClass(el, 'undervoltage-pole');
   });
-  Object.keys(analyticsData.currentData).forEach(id => {
-    analyticsData.currentData[id] = [];
+  lines.forEach(Lobj => {
+    const lel = getLineEl(Lobj);
+    removeClass(lel, 'overvoltage-line');
+    removeClass(lel, 'undervoltage-line');
   });
-  updateCharts();
 }
 
-function updateSystemStatus(status) {
-  const light = document.getElementById("status-light");
-  const text = document.getElementById("status-text");
-  if (!light || !text) return;
+function removeNeutralClasses() {
+  poles.forEach(p => {
+    const el = getPoleMarkerEl(p.id);
+    removeClass(el, 'pole-neutral');
+  });
+  lines.forEach(Lobj => {
+    const lel = getLineEl(Lobj);
+    removeClass(lel, 'line-neutral');
+  });
+}
 
-  text.innerText = status;
-  if (status === "FAULT") {
-    light.style.background = "#f44336"; 
-    text.style.color = "#f44336";
-  } else if (status === "WARNING") {
-    light.style.background = "#ffc107"; 
-    text.style.color = "#ffc107";
-  } else {
-    light.style.background = "#4caf50"; 
-    text.style.color = "#4caf50";
-  }
+function resetAllVisuals() {
+  clearAllColors();
+  clearAllFaultIcons();
+  removeOverUnderClasses();
+  removeNeutralClasses();
 }
 
 function showAlert(msg) {
-  // Query *when called* so it works even if banner element is after scripts
   const banner = document.getElementById("alertBanner");
   if (!banner) return;
   banner.innerText = msg;
   banner.style.display = "block";
-  // force reflow
   void banner.offsetWidth;
   banner.classList.add("show");
   setTimeout(() => {
@@ -296,33 +196,232 @@ function showAlert(msg) {
   }, 5000);
 }
 
-function logEvent(msg, type='info') {
-  let color = "#e0e0e0";
-  if (type === "fault") color = COLOR.FAULT;
-  if (type === "warn") color = COLOR.WARNING;
+function logEvent(msg, type = 'info', data = null) {
+  let color = '#e0e0e0';
+  if (type === 'fault') color = COLOR.FAULT;
+  if (type === 'warn') color = COLOR.WARNING;
+  if (eventLogEl) {
   eventLogEl.innerHTML += `<span style="color:${color};">${new Date().toLocaleTimeString()} - ${msg}</span><br>`;
   eventLogEl.scrollTop = eventLogEl.scrollHeight;
+  }
+}
+
+function updateSystemStatus(status) {
+  const light = document.getElementById("status-light");
+  const text = document.getElementById("status-text");
+  if (!light || !text) return;
+  text.innerText = status;
+  if (status === "FAULT") { light.style.background = COLOR.FAULT; text.style.color = COLOR.FAULT; }
+  else if (status === "WARNING") { light.style.background = COLOR.WARNING; text.style.color = COLOR.WARNING; }
+  else { light.style.background = COLOR.OK; text.style.color = COLOR.OK; }
 }
 
 function showPole(p) {
-  selectedPoleId = p.id; // <-- track last clicked pole for simulateFault()
+  selectedPoleId = p.id;
   const d = poleData[p.id];
   poleInfoEl.innerHTML = `
     <h3 style="margin-bottom:5px; color:#4db6ff;">${p.name}</h3>
-    <div><b>Status:</b> <span style="color:${statusColor(d.status,d.fault_type)}">${d.status}</span></div>
+    <div><b>Status:</b> ${d.status}</div>
     <div><b>Voltage:</b> ${d.voltage} V</div>
     <div><b>Current:</b> ${d.current} A</div>
     <div><b>Fault Code:</b> ${d.fault_code}</div>
     <div><b>Fault Type:</b> ${d.fault_type}</div>
     <div><b>Breaker:</b> ${d.breaker_status}</div>
+    <div style="font-size:12px; color:#aaa;">Last update: ${new Date(d.timestamp).toLocaleTimeString()}</div>
   `;
 }
 
-// ---------------- Analytics Functions ----------------
+// ========================== Fault Behaviors ===================
+function applyNeutralFault(poleId) {
+  removeOverUnderClasses();
+  setPoleColor(poleId, COLOR.NEUTRAL_DARK, { includeLines: false });
+  clearPoleFaultIcon(poleId);
+  const down = downstreamIds(poleId);
+  down.forEach(id => setPoleColor(id, COLOR.WARNING));
+  lines.forEach(Lobj => {
+    if (Lobj.ids.some(id => down.includes(id))) {
+      Lobj.line.setStyle({ color: COLOR.WARNING });
+      addClass(getLineEl(Lobj), 'line-neutral');
+    }
+  });
+  logEvent(`Neutral Fault at Pole ${poleId}`, "warn");
+  showAlert(`⚡ Neutral Fault at Pole ${poleId}`);
+  updateSystemStatus("WARNING");
+}
+
+function applyShortOrLTG(poleId, label) {
+  removeOverUnderClasses();
+  removeNeutralClasses();
+  setPoleColor(poleId, COLOR.FAULT, { includeLines: false });
+  setPoleFaultIcon(poleId, "caution.svg");
+  const down = downstreamIds(poleId);
+  down.forEach(id => setPoleColor(id, COLOR.OFF));
+  lines.forEach(Lobj => {
+    if (Lobj.ids.some(id => down.includes(id))) {
+      Lobj.line.setStyle({ color: COLOR.OFF });
+    } else {
+      Lobj.line.setStyle({ color: COLOR.OK });
+    }
+  });
+  logEvent(`${label} at Pole ${poleId}`, "fault");
+  showAlert(`⚡ ${label} at Pole ${poleId}`);
+  updateSystemStatus("FAULT");
+}
+
+function applyOverUnderGlobal(type, faultPoleId, numericVoltage) {
+  removeNeutralClasses();
+  clearAllColors();
+  removeOverUnderClasses();
+  clearAllFaultIcons();
+  setPoleFaultIcon(faultPoleId, "caution.svg");
+
+  const lineClass = (type === "Overvoltage") ? "overvoltage-line" : "undervoltage-line";
+  const poleClass = (type === "Overvoltage") ? "overvoltage-pole" : "undervoltage-pole";
+  const lineColor = (type === "Overvoltage") ? COLOR.OVERVOLT : COLOR.UNDERVOLT;
+  const label = (type === "Overvoltage") ? "Overvoltage" : "Undervoltage";
+
+  lines.forEach(Lobj => {
+    Lobj.line.setStyle({ color: lineColor, weight: (type === "Overvoltage" ? 5 : 4), opacity: (type === "Overvoltage" ? 0.95 : 0.8) });
+    addClass(getLineEl(Lobj), lineClass);
+  });
+  poles.forEach(p => {
+    if (p.id === SUBSTATION_ID) return;
+    setPoleColor(p.id, lineColor, { borderOnly: true, includeLines: false });
+    const el = getPoleMarkerEl(p.id);
+    addClass(el, poleClass);
+  });
+
+  const extra = (numericVoltage != null) ? ` (${numericVoltage}V)` : "";
+  logEvent(`${label} condition across network${extra} — origin Pole ${faultPoleId}`, "warn");
+  showAlert(`⚠️ ${label} detected — propagating from Pole ${faultPoleId}${extra}`);
+  updateSystemStatus("WARNING");
+}
+
+// ========================== Main Update =======================
+function updatePoleStatus(data) {
+  const pole_id = Number(data.pole_id);
+  if (!pole_id) { console.warn("Missing pole_id", data); return; }
+
+  // Normalize fault type (accepts fault_type or faultType)
+  const rawType = data.fault_type || data.faultType || "Normal";
+  const normalizedType = rawType.toLowerCase();
+  const status = (data.status || "OK").toUpperCase();
+
+  poleData[pole_id] = { ...poleData[pole_id], ...data, timestamp: data.timestamp || Date.now() };
+
+  // Special case: Substation fault => all downstream OFF
+  if (pole_id === SUBSTATION_ID && status === "FAULT") {
+    resetAllVisuals();
+    setPoleColor(SUBSTATION_ID, COLOR.FAULT, { includeLines: false });
+    [1,2,3,4].forEach(id => setPoleColor(id, COLOR.OFF));
+    lines.forEach(Lobj => Lobj.line.setStyle({ color: COLOR.OFF }));
+    logEvent("Substation offline — all poles disconnected", "fault", data);
+    showAlert("⚡ Substation offline — all poles disconnected");
+    updateSystemStatus("FAULT");
+    return;
+  }
+
+  if (status === "FAULT") {
+    switch (normalizedType) {
+      case "short":
+        applyShortOrLTG(pole_id, "Short Circuit Fault");
+        break;
+      case "linetoground":
+        applyShortOrLTG(pole_id, "Line-to-Ground Fault");
+        break;
+      case "neutralfault":
+        applyNeutralFault(pole_id);
+        break;
+      case "overvoltage":
+        resetAllVisuals();
+        applyOverUnderGlobal("Overvoltage", pole_id, data.voltage);
+        break;
+      case "undervoltage":
+        resetAllVisuals();
+        applyOverUnderGlobal("Undervoltage", pole_id, data.voltage);
+        break;
+      default:
+        applyShortOrLTG(pole_id, rawType);
+    }
+  } else if (status === "WARNING") {
+    if (normalizedType === "overvoltage") {
+      applyOverUnderGlobal("Overvoltage", pole_id, data.voltage);
+    } else if (normalizedType === "undervoltage") {
+      applyOverUnderGlobal("Undervoltage", pole_id, data.voltage);
+    } else if (normalizedType === "neutralfault") {
+      applyNeutralFault(pole_id);
+    } else {
+      setPoleColor(pole_id, COLOR.WARNING, { borderOnly: true });
+      logEvent(`Warning @ Pole ${pole_id}`, "warn", data);
+      updateSystemStatus("WARNING");
+    }
+  } else {
+    // OK case
+    clearPoleFaultIcon(pole_id);
+    setPoleColor(pole_id, COLOR.OK);
+
+    // If no active issues, clear network visuals
+    const anyActive = Object.values(poleData).some(d =>
+      (d.status === "FAULT") || 
+      (d.status === "WARNING" && ["overvoltage","undervoltage","neutralfault"].includes((d.fault_type||d.faultType||"").toLowerCase()))
+    );
+
+    if (!anyActive) {
+      resetAllVisuals();
+      updateSystemStatus("OK");
+      logEvent("All clear — system normal.");
+    } else {
+      logEvent(`OK @ Pole ${pole_id}`);
+    }
+  }
+
+  // Update analytics
+  const v = parseFloat(data.voltage);
+  const c = parseFloat(data.current);
+  if (!isNaN(v) || !isNaN(c)) {
+    addAnalyticsData(pole_id, v, c);
+  }
+
+  // Refresh side panel
+  if (selectedPoleId === pole_id) {
+    const p = poles.find(x => x.id === pole_id);
+    if (p) showPole(p);
+  }
+}
+
+
+// ========================== Map ===============================
+function addPoles() {
+  for (let i = 0; i < poles.length; i++) {
+    const p = poles[i];
+    let marker;
+    if (p.id === SUBSTATION_ID) {
+      marker = L.marker(p.coords, {
+        icon: L.divIcon({
+          className: "substation-icon",
+          html: `<div class="triangle-marker"><img src="thunder.svg" class="thunder-icon" alt=""></div>`,
+          iconSize: [44, 44]
+        })
+      }).addTo(map);
+    } else {
+      marker = L.circleMarker(p.coords, { radius: 9, color: COLOR.OK, fillColor: COLOR.OK, fillOpacity: 0.9 }).addTo(map);
+    }
+    marker.bindTooltip(p.name);
+    marker.on("click", () => showPole(p));
+    markers[p.id] = marker;
+    if (i > 0) {
+      let prev = poles[i - 1];
+      let line = L.polyline([prev.coords, p.coords], { color: COLOR.OK, weight: 4, opacity: 0.85 }).addTo(map);
+      lines.push({ ids: [prev.id, p.id], line });
+    }
+  }
+}
+
+// ==================== Analytics Functions =====================
+let voltageChart, currentChart;
+let analyticsVisible = true;
+
 function initializeAnalytics() {
-  console.log("Initializing analytics...");
-  
-  // Populate pole selector
   const poleSelect = document.getElementById('selectedPole');
   poles.forEach(p => {
     const option = document.createElement('option');
@@ -330,394 +429,221 @@ function initializeAnalytics() {
     option.textContent = p.name;
     poleSelect.appendChild(option);
   });
-
-  // Initialize charts
   initializeCharts();
-  
-  // Setup resize functionality
   setupResizeHandler();
-  
-  console.log("Analytics initialized successfully");
 }
 
 function initializeCharts() {
-  console.log("Initializing charts...");
-  
-  const voltageCtx = document.getElementById('voltageChart');
-  const currentCtx = document.getElementById('currentChart');
-  
-  if (!voltageCtx || !currentCtx) {
-    console.error("Chart canvases not found!");
-    return;
-  }
-  
-  const voltageCtx2d = voltageCtx.getContext('2d');
-  const currentCtx2d = currentCtx.getContext('2d');
-
+  const voltageCtx = document.getElementById('voltageChart').getContext('2d');
+  const currentCtx = document.getElementById('currentChart').getContext('2d');
   const chartConfig = {
     type: 'line',
     options: {
       responsive: true,
       maintainAspectRatio: false,
-      animation: {
-        duration: 300
-      },
+      animation: { duration: 300 },
       scales: {
         x: {
           type: 'time',
           time: {
             unit: 'second',
-            displayFormats: {
-              second: 'HH:mm:ss'
-            }
+            displayFormats: { second: 'HH:mm:ss' }
           },
-          grid: {
-            color: 'rgba(255, 255, 255, 0.1)'
-          },
-          ticks: {
-            color: '#9aa4b2',
-            maxTicksLimit: 8
-          }
+          ticks: { autoSkip: true, maxTicksLimit: 8 }
         },
         y: {
-          beginAtZero: false,
-          grid: {
-            color: 'rgba(255, 255, 255, 0.1)'
-          },
-          ticks: {
-            color: '#9aa4b2'
-          }
+          beginAtZero: true,
+          ticks: { color: '#ccc' },
+          grid: { color: 'rgba(255,255,255,0.1)' }
         }
       },
       plugins: {
-        legend: {
-          labels: {
-            color: '#e6e7ea'
-          }
-        }
-      },
-      interaction: {
-        intersect: false,
-        mode: 'index'
+        legend: { labels: { color: '#ccc' } }
       }
     }
   };
 
-  voltageChart = new Chart(voltageCtx2d, {
+  voltageChart = new Chart(voltageCtx, {
     ...chartConfig,
     data: {
-      labels: [],
       datasets: poles.map(p => ({
-        label: p.name,
-        data: [],
-        borderColor: getPoleColor(p.id),
-        backgroundColor: getPoleColor(p.id, 0.1),
-        tension: 0.4,
-        pointRadius: 3,
-        borderWidth: 2
+        label: `Pole ${p.id} Voltage`,
+        data: analyticsData.voltageData[p.id],
+        borderColor: '#00bfff',
+        borderWidth: 2,
+        tension: 0.3,
+        fill: false,
+        pointRadius: 0
       }))
-    },
-    options: {
-      ...chartConfig.options,
-      plugins: {
-        ...chartConfig.options.plugins,
-        title: {
-          display: true,
-          text: 'Voltage (V)',
-          color: '#6bc1ff',
-          font: { size: 14 }
-        }
-      }
     }
   });
 
-  currentChart = new Chart(currentCtx2d, {
+  currentChart = new Chart(currentCtx, {
     ...chartConfig,
     data: {
-      labels: [],
       datasets: poles.map(p => ({
-        label: p.name,
-        data: [],
-        borderColor: getPoleColor(p.id),
-        backgroundColor: getPoleColor(p.id, 0.1),
-        tension: 0.4,
-        pointRadius: 3,
-        borderWidth: 2
+        label: `Pole ${p.id} Current`,
+        data: analyticsData.currentData[p.id],
+        borderColor: '#ff9800',
+        borderWidth: 2,
+        tension: 0.3,
+        fill: false,
+        pointRadius: 0
       }))
-    },
-    options: {
-      ...chartConfig.options,
-      plugins: {
-        ...chartConfig.options.plugins,
-        title: {
-          display: true,
-          text: 'Current (A)',
-          color: '#6bc1ff',
-          font: { size: 14 }
-        }
-      }
     }
   });
-  
-  console.log("Charts created successfully:", { voltageChart, currentChart });
 }
 
-function getPoleColor(poleId, alpha = 1) {
-  const colors = ['#4caf50', '#2196f3', '#ff9800', '#9c27b0', '#f44336'];
-  const color = colors[(poleId - 1) % colors.length];
-  if (alpha === 1) return color;
-  return color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
-}
-
+// push new analytics point
 function addAnalyticsData(poleId, voltage, current) {
-  const timestamp = new Date();
-  
-  // Add voltage data
-  if (voltage !== "---" && !isNaN(voltage)) {
-    analyticsData.voltageData[poleId].push({
-      x: timestamp,
-      y: voltage
-    });
-    console.log(`Added voltage data for pole ${poleId}:`, voltage);
-  }
-  
-  // Add current data
-  if (current !== "---" && !isNaN(current)) {
-    analyticsData.currentData[poleId].push({
-      x: timestamp,
-      y: current
-    });
-    console.log(`Added current data for pole ${poleId}:`, current);
-  }
-  
-  // Limit data points for each pole
-  if (analyticsData.voltageData[poleId].length > analyticsData.maxDataPoints) {
-    analyticsData.voltageData[poleId].shift();
-  }
-  if (analyticsData.currentData[poleId].length > analyticsData.maxDataPoints) {
-    analyticsData.currentData[poleId].shift();
-  }
-  
-  updateCharts();
-}
+  const ts = Date.now();
 
-function updateCharts() {
-  if (!voltageChart || !currentChart) {
-    console.log("Charts not ready yet:", { voltageChart, currentChart });
-    return;
+  if (!analyticsData.voltageData[poleId]) analyticsData.voltageData[poleId] = [];
+  if (!analyticsData.currentData[poleId]) analyticsData.currentData[poleId] = [];
+
+  if (!isNaN(voltage)) {
+    analyticsData.voltageData[poleId].push({ x: ts, y: voltage });
+    if (analyticsData.voltageData[poleId].length > analyticsData.maxDataPoints)
+      analyticsData.voltageData[poleId].shift();
   }
-  
-  const selectedPole = document.getElementById('selectedPole').value;
-  console.log("Updating charts for pole:", selectedPole);
-  
-  // Update voltage chart
-  voltageChart.data.datasets.forEach((dataset, index) => {
-    const poleId = poles[index].id;
-    if (selectedPole === 'all' || selectedPole == poleId) {
-      dataset.data = analyticsData.voltageData[poleId] || [];
-      dataset.hidden = false;
-      console.log(`Voltage data for ${poles[index].name}:`, dataset.data);
-    } else {
-      dataset.hidden = true;
-    }
-  });
-  voltageChart.update('none');
-  
-  // Update current chart
-  currentChart.data.datasets.forEach((dataset, index) => {
-    const poleId = poles[index].id;
-    if (selectedPole === 'all' || selectedPole == poleId) {
-      dataset.data = analyticsData.currentData[poleId] || [];
-      dataset.hidden = false;
-      console.log(`Current data for ${poles[index].name}:`, dataset.data);
-    } else {
-      dataset.hidden = true;
-    }
-  });
-  currentChart.update('none');
-  
-  console.log("Charts updated successfully");
+
+  if (!isNaN(current)) {
+    analyticsData.currentData[poleId].push({ x: ts, y: current });
+    if (analyticsData.currentData[poleId].length > analyticsData.maxDataPoints)
+      analyticsData.currentData[poleId].shift();
+  }
+
+  if (voltageChart && currentChart) {
+    voltageChart.update('none');
+    currentChart.update('none');
+  }
 }
 
 function updateAnalytics() {
-  updateCharts();
+  const selected = document.getElementById('selectedPole').value;
+
+  if (selected === "all") {
+    voltageChart.data.datasets.forEach(ds => ds.hidden = false);
+    currentChart.data.datasets.forEach(ds => ds.hidden = false);
+  } else {
+    voltageChart.data.datasets.forEach(ds => ds.hidden = !ds.label.includes(`Pole ${selected}`));
+    currentChart.data.datasets.forEach(ds => ds.hidden = !ds.label.includes(`Pole ${selected}`));
+  }
+
+  voltageChart.update();
+  currentChart.update();
 }
 
-function toggleAnalytics() {
-  const analyticsBlock = document.getElementById('analyticsBlock');
-  const toggleBtn = document.getElementById('toggleAnalytics');
-  
-  if (analyticsVisible) {
-    analyticsBlock.style.height = '0px';
-    analyticsBlock.style.minHeight = '0px';
-    toggleBtn.textContent = '📈';
-    analyticsVisible = false;
-  } else {
-    analyticsBlock.style.height = '300px';
-    analyticsBlock.style.minHeight = '300px';
-    toggleBtn.textContent = '📉';
-    analyticsVisible = true;
+function clearAnalyticsData() {
+  poles.forEach(p => {
+    analyticsData.voltageData[p.id] = [];
+    analyticsData.currentData[p.id] = [];
+  });
+  if (voltageChart && currentChart) {
+    voltageChart.update();
+    currentChart.update();
   }
 }
 
+function toggleAnalytics() {
+  const block = document.getElementById('analyticsBlock');
+  analyticsVisible = !analyticsVisible;
+  block.style.display = analyticsVisible ? "block" : "none";
+}
+
 function setupResizeHandler() {
-  const analyticsBlock = document.getElementById('analyticsBlock');
-  const resizeHandle = analyticsBlock.querySelector('.resize-handle');
-  
+  const block = document.getElementById('analyticsBlock');
+  const handle = block.querySelector('.resize-handle');
   let isResizing = false;
   let startY = 0;
   let startHeight = 0;
-  
-  resizeHandle.addEventListener('mousedown', (e) => {
+
+  handle.addEventListener('mousedown', e => {
     isResizing = true;
     startY = e.clientY;
-    startHeight = parseInt(getComputedStyle(analyticsBlock).height, 10);
+    startHeight = block.offsetHeight;
     document.body.style.cursor = 'ns-resize';
     e.preventDefault();
   });
-  
-  document.addEventListener('mousemove', (e) => {
+
+  window.addEventListener('mousemove', e => {
     if (!isResizing) return;
     
-    const deltaY = startY - e.clientY;
-    const newHeight = Math.max(200, Math.min(600, startHeight + deltaY));
-    analyticsBlock.style.height = newHeight + 'px';
+    const deltaY = e.clientY - startY;
+    const newHeight = Math.max(200, Math.min(800, startHeight - deltaY)); // Min 200px, Max 800px
+    block.style.height = `${newHeight}px`;
   });
-  
-  document.addEventListener('mouseup', () => {
-    if (isResizing) {
-      isResizing = false;
-      document.body.style.cursor = '';
-    }
+
+  window.addEventListener('mouseup', () => {
+    isResizing = false;
+    document.body.style.cursor = 'default';
   });
 }
 
-function simulateFault(type = "Overcurrent") {
-  let randPole = poles[Math.floor(Math.random()*poles.length)];
-  let fake = {
-    pole_id: randPole.id,
-    substation_id: "S01",
-    voltage: type === "Overcurrent" ? 260 : 180,
-    current: type === "Overcurrent" ? 150 : 80,
-    fault_code: type === "Overcurrent" ? 51 : 27,
-    fault_type: type,
+// ==================== Simulate & Reset ========================
+function simulateFault() {
+  const id = selectedPoleId || 4;
+  const fake = {
+    pole_id: id,
     status: "FAULT",
+    fault_type: "Overvoltage",  // change for testing
+    voltage: 270,
+    current: 110,
     breaker_status: "OPEN",
     timestamp: Date.now()
   };
   updatePoleStatus(fake);
 }
 
-// Generate sample data for demonstration
 function generateSampleData() {
-  poles.forEach(pole => {
-    const baseVoltage = 220 + (Math.random() - 0.5) * 20; // 210-230V range
-    const baseCurrent = 80 + (Math.random() - 0.5) * 20;  // 70-90A range
-    
-    const sampleData = {
-      pole_id: pole.id,
-      voltage: Math.round(baseVoltage),
-      current: Math.round(baseCurrent),
+  // Cycle through all poles with random volt/current
+  poles.forEach(p => {
+    const sample = {
+      pole_id: p.id,
       status: "OK",
+      fault_type: "Normal",
+      voltage: (220 + Math.random() * 20).toFixed(1),
+      current: (50 + Math.random() * 20).toFixed(1),
+      breaker_status: "CLOSED",
       timestamp: Date.now()
     };
-    
-    updatePoleStatus(sampleData);
+    updatePoleStatus(sample);
   });
 }
 
-// Generate sample data every 5 seconds for demonstration
-setInterval(generateSampleData, 5000);
-
-// Generate initial sample data immediately
-setTimeout(generateSampleData, 1000);
-
-
-// ---------------- MQTT ----------------
-const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
-client.on('connect', () => {
-  console.log("✅ Connected MQTT");
-  client.subscribe("scada/grid/hashim/#");
-});
-client.on('message', (topic, msg) => {
-  try {
-    const data = JSON.parse(msg.toString());
-    updatePoleStatus(data);
-  } catch (err) {
-    console.error("Invalid MQTT msg", err);
-  }
-});
-
-// ---------------- Buttons ----------------
-function simulateFault() {
-  // Use last clicked pole, else default to 4
-  const id = selectedPoleId || 4;
-  const fake = { pole_id: id, status: "FAULT", fault_type: "Overcurrent", timestamp: Date.now() };
-  updatePoleStatus(fake);
-}
 function reset() {
-  // Back to normal (green) for all poles + lines
+  resetAllVisuals();
   poles.forEach(p => {
-    poleData[p.id].status = "OK";
-    poleData[p.id].fault_type = "Normal";
-    setPoleColor(p.id, COLOR.OK);
+    poleData[p.id] = {
+      voltage: "---", current: "---", fault_code: "---",
+      fault_type: "Normal", status: "OK", breaker_status: "---",
+      timestamp: Date.now()
+    };
+    clearPoleFaultIcon(p.id);
   });
-  logEvent("System reset to normal");
-  showAlert("System reset to normal state");
+  updateSystemStatus("OK");
+  eventLogEl.innerHTML = "";
+  logEvent("System Reset");
 }
 
-// ---------------- Map ----------------
-function addPoles() {
-  for (let i = 0; i < poles.length; i++) {
-    const p = poles[i];
-    let marker;
+// ==================== MQTT Connection =========================
+const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt");
 
-    if (p.id === 5) {
-      // Substation: filled triangle + centered thunder SVG
-      marker = L.marker(p.coords, {
-        icon: L.divIcon({
-          className: "substation-icon",
-          html: `
-            <div class="triangle-marker">
-              <img src="thunder.svg" class="thunder-icon" alt="">
-            </div>
-          `,
-          iconSize: [40, 40]
-        })
-      }).addTo(map);
-    } else {
-      // Poles: circle markers
-      marker = L.circleMarker(p.coords, {
-        radius: 9,
-        color: COLOR.OK,
-        fillColor: COLOR.OK,
-        fillOpacity: 0.9
-      }).addTo(map);
-    }
-
-    marker.bindTooltip(p.name);
-    marker.on("click", () => showPole(p));
-    markers[p.id] = marker;
-
-    // Connect lines in order 5 -> 4 -> 3 -> 2 -> 1
-    if (i > 0) {
-      let prev = poles[i - 1];
-      let line = L.polyline([prev.coords, p.coords], {
-        color: COLOR.OK, weight: 4, opacity: 0.8
-      }).addTo(map);
-      lines.push({ ids: [prev.id, p.id], line });
-    }
-  }
-}
-
-// ---------------- Init ----------------
-addPoles();
-logEvent("System Initialized. Awaiting data...");
-
-// Initialize analytics after everything is loaded
-window.addEventListener('load', () => {
-  console.log("Window loaded, initializing analytics...");
-  setTimeout(() => {
-    initializeAnalytics();
-  }, 100);
+client.on("connect", () => {
+  console.log("Connected to MQTT broker");
+  client.subscribe("scada/poles/#");
 });
+
+client.on("message", (topic, message) => {
+  try {
+    const data = JSON.parse(message.toString());
+    updatePoleStatus(data);
+  } catch (e) {
+    console.error("Invalid MQTT message", e);
+  }
+});
+
+// ==================== Init ====================================
+addPoles();
+initializeAnalytics();
+reset();

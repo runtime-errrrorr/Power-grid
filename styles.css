@@ -90,6 +90,7 @@ body {
   width: 100%;
   display: flex;
   flex-direction: column;
+  position: relative;   /* Add this for absolute positioning context */
 }
 
 header {
@@ -117,13 +118,17 @@ header {
 .analytics-block {
   background: var(--panel);
   border-top: 1px solid var(--border);
-  min-height: 300px;
-  max-height: 600px;
+  min-height: 200px;
+  max-height: 800px;
   height: 300px;
-  position: relative;
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  z-index: 100;
 }
 
 .analytics-header {
@@ -395,3 +400,91 @@ button:hover {
   height: auto;
   pointer-events: none;
 }
+
+/* ===================== FAULT COLORS ===================== */
+
+/* Neutral fault downstream */
+.pole-neutral {
+  fill: #ffc107 !important;
+  stroke: #ffc107 !important;
+}
+.line-neutral {
+  stroke: #ffc107 !important;
+  stroke-width: 4px;
+}
+
+/* Overvoltage: bright fast cyan surge */
+.overvoltage-line {
+  stroke: #00bfff !important;
+  stroke-width: 5px;
+  opacity: 0.95;
+  animation: surgeFast 0.6s linear infinite;
+}
+.overvoltage-pole {
+  stroke: #00bfff !important;
+  fill: #4caf50 !important; /* keep green fill */
+  animation: surgePulse 0.8s ease-in-out infinite;
+  filter: drop-shadow(0 0 10px #00bfff);
+}
+
+/* Undervoltage: dim slow blue surge */
+.undervoltage-line {
+  stroke: #1e90ff !important;
+  stroke-width: 4px;
+  opacity: 0.7;
+  animation: surgeSlow 2.5s linear infinite;
+}
+.undervoltage-pole {
+  stroke: #1e90ff !important;
+  fill: #4caf50 !important; /* keep green fill */
+  animation: surgeDim 2.5s ease-in-out infinite;
+  filter: drop-shadow(0 0 6px #1e90ff);
+}
+
+/* ===================== ANIMATIONS ===================== */
+
+/* Fast bright flow (Overvoltage) */
+/* Fast bright flow (Overvoltage) */
+@keyframes surgeFast {
+  0%   { stroke-dasharray: 12, 8; stroke-dashoffset: 0; }
+  100% { stroke-dasharray: 12, 8; stroke-dashoffset: 20; }  /* positive offset */
+}
+
+/* Slow dim flow (Undervoltage) */
+@keyframes surgeSlow {
+  0%   { stroke-dasharray: 6, 14; stroke-dashoffset: 0; }
+  100% { stroke-dasharray: 6, 14; stroke-dashoffset: 20; }  /* positive offset */
+}
+
+/* Pulsing glow (Overvoltage poles) */
+@keyframes surgePulse {
+  0%, 100% { filter: drop-shadow(0 0 10px #00bfff); }
+  50%      { filter: drop-shadow(0 0 30px #00bfff); }
+}
+
+/* Dim pulse (Undervoltage poles) */
+@keyframes surgeDim {
+  0%, 100% { filter: drop-shadow(0 0 4px #1e90ff); opacity: 0.6; }
+  50%      { filter: drop-shadow(0 0 15px #1e90ff); opacity: 0.9; }
+}
+
+/* ===================== SUBSTATION ===================== */
+
+/* Triangle base for substation */
+/* .triangle-marker {
+  width: 0;
+  height: 0;
+  border-left: 22px solid transparent;
+  border-right: 22px solid transparent;
+  border-bottom: 38px solid #4caf50; 
+  position: relative;
+}
+
+.triangle-marker .thunder-icon {
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 20px;
+} */
