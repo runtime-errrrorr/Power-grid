@@ -1,43 +1,32 @@
 // ---------------- Map Init ----------------
 const map = L.map('map').setView([8.56235599179857, 76.858811986419], 17);
-
-// Dark theme tiles (Carto dark basemap)
 L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
   attribution: '&copy; OpenStreetMap contributors &copy; CARTO',
   subdomains: 'abcd',
   maxZoom: 19
 }).addTo(map);
 
-// --- ResizeObserver to fix map sizing ---
-const mapContainer = document.getElementById('map');
-const resizeObserver = new ResizeObserver(() => {
-  map.invalidateSize();
-});
-resizeObserver.observe(mapContainer);
-
-const reflowMap = () => {
-  requestAnimationFrame(() => {
-    map.invalidateSize();
-    setTimeout(() => map.invalidateSize(), 0);
-  });
-};
-window.addEventListener('load', reflowMap);
-window.addEventListener('resize', reflowMap);
-map.whenReady(reflowMap);
-
-
 // ---------------- Data ----------------
+const COLOR = {
+  OK: "#4caf50",
+  WARNING: "#ffc107",
+  NEUTRAL_DARK: "#b58900",
+  FAULT: "#f44336",
+  OFF: "#9e9e9e"
+};
+
 let poles = [
   {id:1, name:"Pole 1", coords:[8.561121456920256, 76.857288741109]},
   {id:2, name:"Pole 2", coords:[8.561406528979926, 76.85769082321161]},
   {id:3, name:"Pole 3", coords:[8.561952872142548, 76.85843646112221]},
   {id:4, name:"Pole 4", coords:[8.562446202520935, 76.8590480003807]},
-  {id:5, name:"Pole 5", coords:[8.56333738027111, 76.8599009400019]},
+  {id:5, name:"Substation", coords:[8.56333738027111, 76.8599009400019]}, // hardcoded substation
 ];
 
 let markers = {};
 let lines = [];
-let poleData = {}; // live data store keyed by pole_id
+let poleData = {};
+let selectedPoleId = null; // last-clicked pole id for simulateFault()
 
 // Analytics data storage
 let analyticsData = {
@@ -53,7 +42,7 @@ poles.forEach(p => {
     voltage: "---",
     current: "---",
     fault_code: "---",
-    fault_type: "---",
+    fault_type: "Normal",
     status: "OK",
     breaker_status: "---",
     timestamp: Date.now()
@@ -64,6 +53,54 @@ poles.forEach(p => {
   analyticsData.currentData[p.id] = [];
 });
 
+// ---------------- Helpers ----------------
+function statusColor(status, faultType) {
+  if (status === "FAULT") {
+    if (faultType === "NeutralFault") return COLOR.NEUTRAL_DARK; // darker yellow for origin
+    return COLOR.FAULT;
+  }
+  if (status === "WARNING") return COLOR.WARNING;
+  if (status === "OFF") return COLOR.OFF;
+  return COLOR.OK;
+}
+
+// sets marker + connected lines color
+function setPoleColor(id, color) {
+  const m = markers[id];
+  if (!m) return;
+
+  // Circle markers (poles 1-4) use setStyle
+  if (m.setStyle) {
+    m.setStyle({ color, fillColor: color });
+  } else {
+    // Substation (DivIcon with .triangle-marker)
+    const el = m.getElement && m.getElement();
+    if (el) {
+      const tri = el.querySelector(".triangle-marker");
+      if (tri) tri.style.borderBottomColor = color;
+      // optional: tweak thunder color for contrast (white on red/gray)
+      const thunder = el.querySelector(".thunder-icon");
+      if (thunder) {
+        thunder.style.filter = (color === COLOR.FAULT || color === COLOR.OFF) ? "invert(1)" : "none";
+      }
+    }
+  }
+
+  // Recolor all lines that include this id
+  lines.forEach(l => {
+    if (l.ids.includes(id)) l.line.setStyle({ color });
+  });
+}
+
+function grayDownstream(fromId) {
+  // downstream relative to substation(5) is decreasing ids
+  for (let i = fromId - 1; i >= 1; i--) {
+    setPoleColor(i, COLOR.OFF);
+    poleData[i].status = "OFF";
+  }
+}
+
+// ---------------- UI ----------------
 const eventLogEl = document.getElementById('eventLog');
 const poleInfoEl = document.getElementById('poleInfo');
 const sidePanel = document.getElementById('sidePanel');
@@ -245,36 +282,40 @@ function updateSystemStatus(status) {
 }
 
 function showAlert(msg) {
+  // Query *when called* so it works even if banner element is after scripts
   const banner = document.getElementById("alertBanner");
+  if (!banner) return;
   banner.innerText = msg;
-  banner.style.display = "block"; // ensure it's visible for animation
-
-  // Trigger reflow (forces browser to apply new styles)
+  banner.style.display = "block";
+  // force reflow
   void banner.offsetWidth;
-
   banner.classList.add("show");
-
-  // Auto-hide after 5s
   setTimeout(() => {
     banner.classList.remove("show");
-
-    // Wait for animation to finish, then hide completely
-    setTimeout(() => {
-      banner.style.display = "none";
-    }, 500); // match CSS transition time
+    setTimeout(() => (banner.style.display = "none"), 500);
   }, 5000);
 }
 
-
-function sendReset() {
-  client.publish("scada/grid/hashim/control", JSON.stringify({ command: "reset" }));
-  logEvent("Breaker reset command sent.", "info");
+function logEvent(msg, type='info') {
+  let color = "#e0e0e0";
+  if (type === "fault") color = COLOR.FAULT;
+  if (type === "warn") color = COLOR.WARNING;
+  eventLogEl.innerHTML += `<span style="color:${color};">${new Date().toLocaleTimeString()} - ${msg}</span><br>`;
+  eventLogEl.scrollTop = eventLogEl.scrollHeight;
 }
 
-function acknowledgeAlarm() {
-  let banner = document.getElementById("alertBanner");
-  if (banner) banner.classList.add("hidden");
-  logEvent("Alarm acknowledged by operator.", "info");
+function showPole(p) {
+  selectedPoleId = p.id; // <-- track last clicked pole for simulateFault()
+  const d = poleData[p.id];
+  poleInfoEl.innerHTML = `
+    <h3 style="margin-bottom:5px; color:#4db6ff;">${p.name}</h3>
+    <div><b>Status:</b> <span style="color:${statusColor(d.status,d.fault_type)}">${d.status}</span></div>
+    <div><b>Voltage:</b> ${d.voltage} V</div>
+    <div><b>Current:</b> ${d.current} A</div>
+    <div><b>Fault Code:</b> ${d.fault_code}</div>
+    <div><b>Fault Type:</b> ${d.fault_type}</div>
+    <div><b>Breaker:</b> ${d.breaker_status}</div>
+  `;
 }
 
 // ---------------- Analytics Functions ----------------
@@ -592,48 +633,84 @@ setInterval(generateSampleData, 5000);
 setTimeout(generateSampleData, 1000);
 
 
-// --- Hamburger Menu Logic ---
-hamburgerBtn.addEventListener('click', () => {
-  sidePanel.classList.toggle('open');
-});
-
-// Close menu if clicking outside of it on mobile
-document.getElementById('mainContent').addEventListener('click', () => {
-  if (window.innerWidth <= 768 && sidePanel.classList.contains('open')) {
-    sidePanel.classList.remove('open');
-  }
-});
-
-
-// ---------------- MQTT Setup ----------------
-// requires: <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script> in your HTML
-
+// ---------------- MQTT ----------------
 const client = mqtt.connect('wss://broker.hivemq.com:8884/mqtt');
-
 client.on('connect', () => {
-  console.log("✅ Connected to HiveMQ Broker");
-  client.subscribe("scada/grid/hashim/#"); // use your own namespace
+  console.log("✅ Connected MQTT");
+  client.subscribe("scada/grid/hashim/#");
 });
-
-client.on('message', (topic, message) => {
+client.on('message', (topic, msg) => {
   try {
-    const data = JSON.parse(message.toString());
-    if (!data.pole_id) {
-      console.warn("⚠️ Ignored message: missing pole_id", data);
-      return;
-    }
+    const data = JSON.parse(msg.toString());
     updatePoleStatus(data);
   } catch (err) {
-    console.error("❌ Invalid MQTT message", err, message.toString());
+    console.error("Invalid MQTT msg", err);
   }
 });
 
-client.on('error', (err) => {
-  console.error("MQTT Error:", err);
-});
+// ---------------- Buttons ----------------
+function simulateFault() {
+  // Use last clicked pole, else default to 4
+  const id = selectedPoleId || 4;
+  const fake = { pole_id: id, status: "FAULT", fault_type: "Overcurrent", timestamp: Date.now() };
+  updatePoleStatus(fake);
+}
+function reset() {
+  // Back to normal (green) for all poles + lines
+  poles.forEach(p => {
+    poleData[p.id].status = "OK";
+    poleData[p.id].fault_type = "Normal";
+    setPoleColor(p.id, COLOR.OK);
+  });
+  logEvent("System reset to normal");
+  showAlert("System reset to normal state");
+}
 
+// ---------------- Map ----------------
+function addPoles() {
+  for (let i = 0; i < poles.length; i++) {
+    const p = poles[i];
+    let marker;
 
-// ---------------- Run ----------------
+    if (p.id === 5) {
+      // Substation: filled triangle + centered thunder SVG
+      marker = L.marker(p.coords, {
+        icon: L.divIcon({
+          className: "substation-icon",
+          html: `
+            <div class="triangle-marker">
+              <img src="thunder.svg" class="thunder-icon" alt="">
+            </div>
+          `,
+          iconSize: [40, 40]
+        })
+      }).addTo(map);
+    } else {
+      // Poles: circle markers
+      marker = L.circleMarker(p.coords, {
+        radius: 9,
+        color: COLOR.OK,
+        fillColor: COLOR.OK,
+        fillOpacity: 0.9
+      }).addTo(map);
+    }
+
+    marker.bindTooltip(p.name);
+    marker.on("click", () => showPole(p));
+    markers[p.id] = marker;
+
+    // Connect lines in order 5 -> 4 -> 3 -> 2 -> 1
+    if (i > 0) {
+      let prev = poles[i - 1];
+      let line = L.polyline([prev.coords, p.coords], {
+        color: COLOR.OK, weight: 4, opacity: 0.8
+      }).addTo(map);
+      lines.push({ ids: [prev.id, p.id], line });
+    }
+  }
+}
+
+// ---------------- Init ----------------
 addPoles();
 logEvent("System Initialized. Awaiting data...");
 

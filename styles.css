@@ -302,23 +302,96 @@ button:hover {
   }
 }
 
+/* Toast-style alert */
 .alert-banner {
   position: fixed;
   top: 20px;
-  right: -400px; /* hidden off screen */
+  right: -400px;
   background: #f44336;
   color: white;
   padding: 15px 25px;
   border-radius: 6px;
   font-weight: bold;
   box-shadow: 0 4px 12px rgba(0,0,0,0.3);
-  transition: right 0.5s ease-in-out, opacity 0.5s ease-in-out;
+  transition: right 0.5s ease-in-out, opacity 0.5s;
   opacity: 0;
-  z-index: 9999;
-  display: none; /* fully hidden by default */
+  z-index: 2000;
+  display: none;
 }
 .alert-banner.show {
-  right: 20px;   /* slide into view */
+  right: 20px;
   opacity: 1;
   display: block;
+}
+
+/* Substation marker icon */
+.triangle-marker {
+  width: 0;
+  height: 0;
+  border-left: 15px solid transparent;
+  border-right: 15px solid transparent;
+  border-bottom: 26px solid #4caf50; /* Green filled triangle */
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 14px;  /* thunder size */
+  color: #000;      /* thunder color (black for contrast) */
+  line-height: 0;
+}
+
+
+.triangle-marker {
+  width: 0;
+  height: 0;
+  border-left: 20px solid transparent;
+  border-right: 20px solid transparent;
+  border-bottom: 34px solid #4caf50; /* green fill */
+  position: relative;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
+
+.thunder-icon {
+  position: absolute;
+  top: 8px;    /* adjust vertical centering */
+  width: 16px; /* resize thunder */
+  height: auto;
+}
+
+/* Toast-style alert (if you already added these earlier, keep them) */
+.alert-banner {
+  position: fixed;
+  top: 20px;
+  right: -400px;
+  background: #f44336;
+  color: white;
+  padding: 15px 25px;
+  border-radius: 6px;
+  font-weight: bold;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  transition: right 0.5s ease-in-out, opacity 0.5s;
+  opacity: 0;
+  z-index: 2000;
+  display: none;
+}
+.alert-banner.show { right: 20px; opacity: 1; display: block; }
+
+/* Substation marker (filled triangle + centered thunder SVG) */
+.substation-icon { display: flex; align-items: center; justify-content: center; }
+.triangle-marker {
+  position: relative;
+  width: 0; height: 0;
+  border-left: 20px solid transparent;
+  border-right: 20px solid transparent;
+  border-bottom: 34px solid #4caf50; /* this is the "fill" color we recolor via JS */
+}
+.triangle-marker .thunder-icon {
+  position: absolute;
+  left: 50%; transform: translateX(-50%);
+  top: 7px;          /* tweak for vertical centering */
+  width: 16px;       /* adjust thunder size as needed */
+  height: auto;
+  pointer-events: none;
 }
