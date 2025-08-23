@@ -39,6 +39,14 @@ let markers = {};
 let lines = [];
 let poleData = {}; // live data store keyed by pole_id
 
+// Analytics data storage
+let analyticsData = {
+  timestamps: [],
+  voltageData: {},
+  currentData: {},
+  maxDataPoints: 50
+};
+
 // init with default placeholder values
 poles.forEach(p => {
   poleData[p.id] = {
@@ -50,12 +58,20 @@ poles.forEach(p => {
     breaker_status: "---",
     timestamp: Date.now()
   };
+  
+  // Initialize analytics data for each pole
+  analyticsData.voltageData[p.id] = [];
+  analyticsData.currentData[p.id] = [];
 });
 
 const eventLogEl = document.getElementById('eventLog');
 const poleInfoEl = document.getElementById('poleInfo');
 const sidePanel = document.getElementById('sidePanel');
 const hamburgerBtn = document.getElementById('hamburger-btn');
+
+// Analytics elements
+let voltageChart, currentChart;
+let analyticsVisible = true;
 
 
 // ---------------- Functions ----------------
@@ -117,6 +133,9 @@ function updatePoleStatus(data) {
 
   // Store the latest data (merge with defaults)
   poleData[pole_id] = { ...poleData[pole_id], ...data };
+
+  // Add data to analytics
+  addAnalyticsData(pole_id, data.voltage, data.current);
 
   // Update marker color
   if (markers[pole_id]) {
@@ -191,6 +210,20 @@ function reset() {
   lines.forEach(l=> l.line.setStyle({color:"#4caf50"}));
   updateSystemStatus("OK");
   logEvent("System reset. All systems normal.");
+  
+  // Clear analytics data
+  clearAnalyticsData();
+}
+
+function clearAnalyticsData() {
+  analyticsData.timestamps = [];
+  Object.keys(analyticsData.voltageData).forEach(id => {
+    analyticsData.voltageData[id] = [];
+  });
+  Object.keys(analyticsData.currentData).forEach(id => {
+    analyticsData.currentData[id] = [];
+  });
+  updateCharts();
 }
 
 function updateSystemStatus(status) {
@@ -244,6 +277,280 @@ function acknowledgeAlarm() {
   logEvent("Alarm acknowledged by operator.", "info");
 }
 
+// ---------------- Analytics Functions ----------------
+function initializeAnalytics() {
+  console.log("Initializing analytics...");
+  
+  // Populate pole selector
+  const poleSelect = document.getElementById('selectedPole');
+  poles.forEach(p => {
+    const option = document.createElement('option');
+    option.value = p.id;
+    option.textContent = p.name;
+    poleSelect.appendChild(option);
+  });
+
+  // Initialize charts
+  initializeCharts();
+  
+  // Setup resize functionality
+  setupResizeHandler();
+  
+  console.log("Analytics initialized successfully");
+}
+
+function initializeCharts() {
+  console.log("Initializing charts...");
+  
+  const voltageCtx = document.getElementById('voltageChart');
+  const currentCtx = document.getElementById('currentChart');
+  
+  if (!voltageCtx || !currentCtx) {
+    console.error("Chart canvases not found!");
+    return;
+  }
+  
+  const voltageCtx2d = voltageCtx.getContext('2d');
+  const currentCtx2d = currentCtx.getContext('2d');
+
+  const chartConfig = {
+    type: 'line',
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: {
+        duration: 300
+      },
+      scales: {
+        x: {
+          type: 'time',
+          time: {
+            unit: 'second',
+            displayFormats: {
+              second: 'HH:mm:ss'
+            }
+          },
+          grid: {
+            color: 'rgba(255, 255, 255, 0.1)'
+          },
+          ticks: {
+            color: '#9aa4b2',
+            maxTicksLimit: 8
+          }
+        },
+        y: {
+          beginAtZero: false,
+          grid: {
+            color: 'rgba(255, 255, 255, 0.1)'
+          },
+          ticks: {
+            color: '#9aa4b2'
+          }
+        }
+      },
+      plugins: {
+        legend: {
+          labels: {
+            color: '#e6e7ea'
+          }
+        }
+      },
+      interaction: {
+        intersect: false,
+        mode: 'index'
+      }
+    }
+  };
+
+  voltageChart = new Chart(voltageCtx2d, {
+    ...chartConfig,
+    data: {
+      labels: [],
+      datasets: poles.map(p => ({
+        label: p.name,
+        data: [],
+        borderColor: getPoleColor(p.id),
+        backgroundColor: getPoleColor(p.id, 0.1),
+        tension: 0.4,
+        pointRadius: 3,
+        borderWidth: 2
+      }))
+    },
+    options: {
+      ...chartConfig.options,
+      plugins: {
+        ...chartConfig.options.plugins,
+        title: {
+          display: true,
+          text: 'Voltage (V)',
+          color: '#6bc1ff',
+          font: { size: 14 }
+        }
+      }
+    }
+  });
+
+  currentChart = new Chart(currentCtx2d, {
+    ...chartConfig,
+    data: {
+      labels: [],
+      datasets: poles.map(p => ({
+        label: p.name,
+        data: [],
+        borderColor: getPoleColor(p.id),
+        backgroundColor: getPoleColor(p.id, 0.1),
+        tension: 0.4,
+        pointRadius: 3,
+        borderWidth: 2
+      }))
+    },
+    options: {
+      ...chartConfig.options,
+      plugins: {
+        ...chartConfig.options.plugins,
+        title: {
+          display: true,
+          text: 'Current (A)',
+          color: '#6bc1ff',
+          font: { size: 14 }
+        }
+      }
+    }
+  });
+  
+  console.log("Charts created successfully:", { voltageChart, currentChart });
+}
+
+function getPoleColor(poleId, alpha = 1) {
+  const colors = ['#4caf50', '#2196f3', '#ff9800', '#9c27b0', '#f44336'];
+  const color = colors[(poleId - 1) % colors.length];
+  if (alpha === 1) return color;
+  return color + Math.floor(alpha * 255).toString(16).padStart(2, '0');
+}
+
+function addAnalyticsData(poleId, voltage, current) {
+  const timestamp = new Date();
+  
+  // Add voltage data
+  if (voltage !== "---" && !isNaN(voltage)) {
+    analyticsData.voltageData[poleId].push({
+      x: timestamp,
+      y: voltage
+    });
+    console.log(`Added voltage data for pole ${poleId}:`, voltage);
+  }
+  
+  // Add current data
+  if (current !== "---" && !isNaN(current)) {
+    analyticsData.currentData[poleId].push({
+      x: timestamp,
+      y: current
+    });
+    console.log(`Added current data for pole ${poleId}:`, current);
+  }
+  
+  // Limit data points for each pole
+  if (analyticsData.voltageData[poleId].length > analyticsData.maxDataPoints) {
+    analyticsData.voltageData[poleId].shift();
+  }
+  if (analyticsData.currentData[poleId].length > analyticsData.maxDataPoints) {
+    analyticsData.currentData[poleId].shift();
+  }
+  
+  updateCharts();
+}
+
+function updateCharts() {
+  if (!voltageChart || !currentChart) {
+    console.log("Charts not ready yet:", { voltageChart, currentChart });
+    return;
+  }
+  
+  const selectedPole = document.getElementById('selectedPole').value;
+  console.log("Updating charts for pole:", selectedPole);
+  
+  // Update voltage chart
+  voltageChart.data.datasets.forEach((dataset, index) => {
+    const poleId = poles[index].id;
+    if (selectedPole === 'all' || selectedPole == poleId) {
+      dataset.data = analyticsData.voltageData[poleId] || [];
+      dataset.hidden = false;
+      console.log(`Voltage data for ${poles[index].name}:`, dataset.data);
+    } else {
+      dataset.hidden = true;
+    }
+  });
+  voltageChart.update('none');
+  
+  // Update current chart
+  currentChart.data.datasets.forEach((dataset, index) => {
+    const poleId = poles[index].id;
+    if (selectedPole === 'all' || selectedPole == poleId) {
+      dataset.data = analyticsData.currentData[poleId] || [];
+      dataset.hidden = false;
+      console.log(`Current data for ${poles[index].name}:`, dataset.data);
+    } else {
+      dataset.hidden = true;
+    }
+  });
+  currentChart.update('none');
+  
+  console.log("Charts updated successfully");
+}
+
+function updateAnalytics() {
+  updateCharts();
+}
+
+function toggleAnalytics() {
+  const analyticsBlock = document.getElementById('analyticsBlock');
+  const toggleBtn = document.getElementById('toggleAnalytics');
+  
+  if (analyticsVisible) {
+    analyticsBlock.style.height = '0px';
+    analyticsBlock.style.minHeight = '0px';
+    toggleBtn.textContent = '📈';
+    analyticsVisible = false;
+  } else {
+    analyticsBlock.style.height = '300px';
+    analyticsBlock.style.minHeight = '300px';
+    toggleBtn.textContent = '📉';
+    analyticsVisible = true;
+  }
+}
+
+function setupResizeHandler() {
+  const analyticsBlock = document.getElementById('analyticsBlock');
+  const resizeHandle = analyticsBlock.querySelector('.resize-handle');
+  
+  let isResizing = false;
+  let startY = 0;
+  let startHeight = 0;
+  
+  resizeHandle.addEventListener('mousedown', (e) => {
+    isResizing = true;
+    startY = e.clientY;
+    startHeight = parseInt(getComputedStyle(analyticsBlock).height, 10);
+    document.body.style.cursor = 'ns-resize';
+    e.preventDefault();
+  });
+  
+  document.addEventListener('mousemove', (e) => {
+    if (!isResizing) return;
+    
+    const deltaY = startY - e.clientY;
+    const newHeight = Math.max(200, Math.min(600, startHeight + deltaY));
+    analyticsBlock.style.height = newHeight + 'px';
+  });
+  
+  document.addEventListener('mouseup', () => {
+    if (isResizing) {
+      isResizing = false;
+      document.body.style.cursor = '';
+    }
+  });
+}
+
 function simulateFault(type = "Overcurrent") {
   let randPole = poles[Math.floor(Math.random()*poles.length)];
   let fake = {
@@ -259,6 +566,30 @@ function simulateFault(type = "Overcurrent") {
   };
   updatePoleStatus(fake);
 }
+
+// Generate sample data for demonstration
+function generateSampleData() {
+  poles.forEach(pole => {
+    const baseVoltage = 220 + (Math.random() - 0.5) * 20; // 210-230V range
+    const baseCurrent = 80 + (Math.random() - 0.5) * 20;  // 70-90A range
+    
+    const sampleData = {
+      pole_id: pole.id,
+      voltage: Math.round(baseVoltage),
+      current: Math.round(baseCurrent),
+      status: "OK",
+      timestamp: Date.now()
+    };
+    
+    updatePoleStatus(sampleData);
+  });
+}
+
+// Generate sample data every 5 seconds for demonstration
+setInterval(generateSampleData, 5000);
+
+// Generate initial sample data immediately
+setTimeout(generateSampleData, 1000);
 
 
 // --- Hamburger Menu Logic ---
@@ -305,3 +636,11 @@ client.on('error', (err) => {
 // ---------------- Run ----------------
 addPoles();
 logEvent("System Initialized. Awaiting data...");
+
+// Initialize analytics after everything is loaded
+window.addEventListener('load', () => {
+  console.log("Window loaded, initializing analytics...");
+  setTimeout(() => {
+    initializeAnalytics();
+  }, 100);
+});

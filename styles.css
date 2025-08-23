@@ -110,6 +110,117 @@ header {
   width: 100%;        /* Fill the parent (#mainContent) horizontally */
   flex-grow: 1;       /* ✅ This makes it fill the remaining vertical space */
   z-index: 1;
+  border-bottom: 1px solid var(--border);
+}
+
+/* --- Analytics Block --- */
+.analytics-block {
+  background: var(--panel);
+  border-top: 1px solid var(--border);
+  min-height: 300px;
+  max-height: 600px;
+  height: 300px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.analytics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+  background: rgba(0, 0, 0, 0.2);
+}
+
+.analytics-header h3 {
+  margin: 0;
+  color: var(--accent);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.analytics-controls {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.analytics-controls select {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  min-width: 120px;
+  cursor: pointer;
+}
+
+.analytics-controls button {
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  margin: 0;
+  width: auto;
+  min-width: 36px;
+  transition: all 0.2s ease;
+}
+
+.analytics-controls button:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--accent);
+}
+
+.analytics-content {
+  flex: 1;
+  display: flex;
+  gap: 16px;
+  padding: 16px;
+  overflow: hidden;
+}
+
+.chart-container {
+  flex: 1;
+  position: relative;
+  min-height: 0;
+  background: rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  padding: 8px;
+}
+
+.chart-container canvas {
+  width: 100% !important;
+  height: 100% !important;
+  max-height: 100%;
+}
+
+/* --- Resize Handle --- */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: transparent;
+  cursor: ns-resize;
+  z-index: 10;
+}
+
+.resize-handle:hover {
+  background: var(--accent);
+  opacity: 0.6;
+}
+
+.resize-handle:active {
+  background: var(--accent);
+  opacity: 1;
 }
 
 /* --- Controls & Buttons --- */
@@ -179,6 +290,15 @@ button:hover {
 
   #hamburger-btn {
     display: block;
+  }
+  
+  .analytics-content {
+    flex-direction: column;
+    gap: 12px;
+  }
+  
+  .chart-container {
+    min-height: 200px;
   }
 }
 
