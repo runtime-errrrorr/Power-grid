@@ -1,67 +1,77 @@
-<!DOCTYPE html>
-<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SCADA Distribution GUI</title>
+
+  <!-- Leaflet CSS -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Your styles -->
   <link rel="stylesheet" href="styles.css" />
 </head>
-<script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
-
-  
 <body>
 
-<!-- Side Panel (now on the left) -->
-<div id="sidePanel">
-  <h2>Pole Details</h2>
-  <div id="poleInfo">Click a pole to see details.</div>
-  <h3>Event Timeline</h3>
-  <div id="eventLog"></div>
-  <button onclick="simulateFault()">⚡ Simulate Fault</button>
-  <button onclick="generateSampleData()">📊 Generate Sample Data</button>
-  <button onclick="reset()">🔄 Reset System</button>
-  <button onclick="showAnalytics()" id="viewGraphBtn">📈 View Graph</button>
-</div>
-
-<!-- Main Content Area -->
-<div id="mainContent">
-  <header>
-    <button id="hamburger-btn">☰</button>
-    <span>SCADA Grid Overview</span>
-  </header>
-  <div id="map"></div>
-  
-  <!-- Analytics Block -->
-  <div id="analyticsBlock" class="analytics-block">
-    <div class="analytics-header">
-      <h3>📊 Real-time Analytics</h3>
-      <div class="analytics-controls">
-        <select id="selectedPole" onchange="updateAnalytics()">
-          <option value="all">All Poles</option>
-        </select>
-        <button onclick="clearAnalyticsData()" title="Clear Analytics Data">🗑️</button>
-        <button onclick="toggleAnalytics()" id="toggleAnalytics">📉</button>
-      </div>
-    </div>
-    <div class="analytics-content">
-      <div class="chart-container">
-        <canvas id="voltageChart"></canvas>
-      </div>
-      <div class="chart-container">
-        <canvas id="currentChart"></canvas>
-      </div>
-    </div>
-    <div class="resize-handle"></div>
+  <!-- Side Panel -->
+  <div id="sidePanel">
+    <h2>Pole Details</h2>
+    <div id="poleInfo">Click a pole to see details.</div>
+    <h3>Event Timeline</h3>
+    <div id="eventLog"></div>
+    <button onclick="simulateFault()">Simulate Fault</button>
+    <button onclick="generateSampleData()">Generate Sample Data</button>
+    <button onclick="reset()">Reset System</button>
+    <button onclick="showAnalytics()" id="viewGraphBtn">View Graph</button>
   </div>
-</div>
 
+  <!-- Main Content -->
+  <div id="mainContent">
+    <header>
+      <button id="hamburger-btn">☰</button>
+      <span>Grid Overview</span>
+    </header>
+    <div id="map"></div>
+    
+    <!-- Analytics -->
+    <div id="analyticsBlock" class="analytics-block">
+      <div class="analytics-header">
+        <h3>Real-time Analytics</h3>
+        <div class="analytics-controls">
+          <select id="selectedPole" onchange="updateAnalytics()">
+            <option value="all">All Poles</option>
+          </select>
+          <button onclick="clearAnalyticsData()" title="Clear Analytics Data">🗑️</button>
+          <button onclick="toggleAnalytics()" id="toggleAnalytics">📉</button>
+        </div>
+      </div>
+      <div class="analytics-content">
+        <div class="chart-container">
+          <canvas id="voltageChart"></canvas>
+        </div>
+        <div class="chart-container">
+          <canvas id="currentChart"></canvas>
+        </div>
+      </div>
+      <div class="resize-handle"></div>
+    </div>
+  </div>
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script src="main.js"></script>
-<div id="alertBanner" class="alert-banner"></div>
+  <div id="alertBanner" class="alert-banner"></div>
+
+  <!-- ✅ External Libs First -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="https://unpkg.com/mqtt/dist/mqtt.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns"></script>
+
+  <!-- ✅ Then Your Modular Scripts -->
+  <script src="js/config.js"></script>
+  <script src="js/faults.js"></script>  <!-- moved above -->
+  <script src="js/utils.js"></script>
+  <script src="js/map.js"></script>
+  <script src="js/ui.js"></script>
+  <script src="js/analytics.js"></script>
+  <script src="js/mqtt.js"></script>
+  <script src="js/main.js"></script>
+  
 
 </body>
-</html>
