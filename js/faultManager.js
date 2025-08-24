@@ -9,6 +9,72 @@ export class FaultManager {
     this.mapManager = mapManager;
   }
   
+  updateSubstationStatus(data) {
+    // Handle substation status updates from MQTT
+    // Expected JSON format: { voltage, current, status, fault_code }
+    
+    const substationId = SUBSTATION_ID;
+    const status = (data.status || "OK").toUpperCase();
+    const voltage = parseFloat(data.voltage) || 0;
+    const current = parseFloat(data.current) || 0;
+    const faultCode = data.fault_code || 0;
+    
+    // Update substation data in state
+    appState.updatePoleData(substationId, {
+      pole_id: substationId,
+      voltage: voltage,
+      current: current,
+      status: status,
+      fault_code: faultCode,
+      timestamp: Date.now()
+    });
+    
+    if (status === "FAULT") {
+      // Substation fault affects entire network
+      this.mapManager.resetAllVisuals();
+      this.mapManager.setPoleColor(substationId, COLOR.FAULT, { includeLines: false });
+      
+      // Turn off all downstream poles
+      [1, 2, 3, 4].forEach(id => this.mapManager.setPoleColor(id, COLOR.OFF));
+      
+      // Turn off all lines
+      const lines = appState.getLines();
+      lines.forEach(Lobj => Lobj.line.setStyle({ color: COLOR.OFF }));
+      
+      const eventLogEl = document.getElementById('eventLog');
+      logEvent(eventLogEl, "Substation fault — all poles disconnected", "fault", data);
+      showAlert("⚡ Substation fault — all poles disconnected");
+      updateSystemStatus("FAULT");
+    } else if (status === "WARNING") {
+      this.mapManager.setPoleColor(substationId, COLOR.WARNING, { borderOnly: true });
+      const eventLogEl = document.getElementById('eventLog');
+      logEvent(eventLogEl, "Substation warning", "warn", data);
+      updateSystemStatus("WARNING");
+    } else {
+      // OK status
+      this.mapManager.setPoleColor(substationId, COLOR.OK);
+      this.mapManager.clearPoleFaultIcon(substationId);
+      
+      // Check if we should reset network visuals
+      const poleData = appState.getPoleData();
+      const anyActive = Object.values(poleData).some(d =>
+        d.pole_id !== substationId && 
+        ((d.status === "FAULT") || 
+         (d.status === "WARNING" && ["overvoltage","undervoltage","neutralfault","neutral break"].includes((d.fault_type||"").toLowerCase())))
+      );
+      
+      if (!anyActive) {
+        this.mapManager.resetAllVisuals();
+        updateSystemStatus("OK");
+      }
+    }
+    
+    // Update analytics for substation
+    if (!isNaN(voltage) || !isNaN(current)) {
+      appState.addAnalyticsData(substationId, voltage, current);
+    }
+  }
+  
   applyNeutralFault(poleId) {
     this.mapManager.removeOverUnderClasses();
     this.mapManager.setPoleColor(poleId, COLOR.NEUTRAL_DARK, { includeLines: false });
@@ -128,12 +194,14 @@ export class FaultManager {
     if (status === "FAULT") {
       switch (normalizedType) {
         case "short":
+        case "line fault":
           this.applyShortOrLTG(pole_id, "Short Circuit Fault");
           break;
         case "linetoground":
           this.applyShortOrLTG(pole_id, "Line-to-Ground Fault");
           break;
         case "neutralfault":
+        case "neutral break":
           this.applyNeutralFault(pole_id);
           break;
         case "overvoltage":
@@ -152,7 +220,7 @@ export class FaultManager {
         this.applyOverUnderGlobal("Overvoltage", pole_id, data.voltage);
       } else if (normalizedType === "undervoltage") {
         this.applyOverUnderGlobal("Undervoltage", pole_id, data.voltage);
-      } else if (normalizedType === "neutralfault") {
+      } else if (normalizedType === "neutralfault" || normalizedType === "neutral break") {
         this.applyNeutralFault(pole_id);
       } else {
         this.mapManager.setPoleColor(pole_id, COLOR.WARNING, { borderOnly: true });
@@ -169,7 +237,7 @@ export class FaultManager {
       const poleData = appState.getPoleData();
       const anyActive = Object.values(poleData).some(d =>
         (d.status === "FAULT") || 
-        (d.status === "WARNING" && ["overvoltage","undervoltage","neutralfault"].includes((d.fault_type||d.faultType||"").toLowerCase()))
+        (d.status === "WARNING" && ["overvoltage","undervoltage","neutralfault","neutral break"].includes((d.fault_type||d.faultType||"").toLowerCase()))
       );
 
       if (!anyActive) {

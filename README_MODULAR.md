@@ -38,8 +38,8 @@ app.js (Main Application)
 
 ### 4. `faultManager.js`
 - **Purpose**: Fault detection and processing logic
-- **Contains**: Fault type handling, visual fault effects, pole status updates
-- **Benefits**: Centralized fault logic, easier to add new fault types
+- **Contains**: Fault type handling, visual fault effects, pole status updates, substation status handling
+- **Benefits**: Centralized fault logic, easier to add new fault types, handles both pole and substation faults
 
 ### 5. `analyticsManager.js`
 - **Purpose**: Charts and analytics functionality
@@ -47,9 +47,9 @@ app.js (Main Application)
 - **Benefits**: Isolated chart logic, easier to modify analytics
 
 ### 6. `mqttManager.js`
-- **Purpose**: MQTT communication
-- **Contains**: Broker connection, message handling, command publishing
-- **Benefits**: Isolated network logic, easier to change communication protocols
+- **Purpose**: MQTT communication with dual topic support
+- **Contains**: Broker connection, dual topic subscription, message parsing for different formats
+- **Benefits**: Isolated network logic, handles both JSON and custom string formats, easier to change communication protocols
 
 ### 7. `uiManager.js`
 - **Purpose**: User interface and controls
@@ -60,6 +60,41 @@ app.js (Main Application)
 - **Purpose**: Main application coordinator
 - **Contains**: Module initialization, dependency management, application lifecycle
 - **Benefits**: Clear initialization order, easy to understand dependencies
+
+## MQTT Communication
+
+The application now supports two MQTT topics for comprehensive power grid monitoring:
+
+### Substation Topic: `scada/grid/substation1/status`
+- **Format**: JSON messages
+- **Content**: Voltage, current, status, and fault code
+- **Example**:
+  ```json
+  {
+    "voltage": 220.5,
+    "current": 15.2,
+    "status": "OK",
+    "fault_code": 0
+  }
+  ```
+- **Status Values**: "OK", "WARNING", "FAULT"
+- **Update Frequency**: Every 5 seconds
+
+### Poles Topic: `scada/grid/pole`
+- **Format**: Custom string format starting with `$$` and ending with `##`
+- **Content**: Pole ID, substation ID, voltage, current, error code
+- **Example**: `$$P01,S01,220.0,15.0,0##`
+- **Error Codes**:
+  - `0`: Normal operation
+  - `27`: Line fault (short circuit)
+  - `10`: Neutral break
+- **Update Frequency**: Every 5 seconds
+
+### Message Processing
+- **Substation messages**: Parsed as JSON and sent to `updateSubstationStatus()`
+- **Pole messages**: Parsed from custom format and sent to `updatePoleStatus()`
+- **Automatic parsing**: The system automatically detects message format and routes accordingly
+- **Real-time updates**: Visual grid representation updates immediately upon message receipt
 
 ## Benefits of Modular Architecture
 

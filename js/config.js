@@ -38,7 +38,8 @@ export const POLES = [
 export const MQTT_CONFIG = {
   BROKER_URL: "wss://broker.hivemq.com:8884/mqtt",
   TOPICS: {
-    POLES: "scada/poles/#",
+    SUBSTATION: "scada/grid/substation1/status",
+    POLES: "scada/grid/pole/1",
     COMMANDS: "scada/commands/substation"
   }
 };
