@@ -29,6 +29,7 @@ export class UIManager {
     window.updateAnalytics = () => this.updateAnalytics();
     window.clearAnalyticsData = () => this.clearAnalyticsData();
     window.toggleAnalytics = () => this.toggleAnalytics();
+    window.refreshCharts = () => this.analyticsManager.refreshCharts();
   }
   
   setupHamburgerMenu() {

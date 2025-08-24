@@ -32,6 +32,11 @@ export class SCADAApp {
         this.mqttManager
       );
       
+      // Connect analytics callback to state manager
+      appState.setAnalyticsUpdateCallback(() => {
+        this.analyticsManager.updateChartsWithNewData();
+      });
+      
       // Initialize map and poles
       this.mapManager.addPoles();
       

@@ -20,6 +20,9 @@ export class AppState {
       maxDataPoints: ANALYTICS_MAX_DATA_POINTS
     };
     
+    // Callback for analytics updates
+    this.analyticsUpdateCallback = null;
+    
     this.initializeState();
   }
   
@@ -82,6 +85,10 @@ export class AppState {
     this.faultIcons = {};
   }
   
+  setAnalyticsUpdateCallback(callback) {
+    this.analyticsUpdateCallback = callback;
+  }
+  
   addAnalyticsData(poleId, voltage, current) {
     const ts = Date.now();
     
@@ -99,6 +106,11 @@ export class AppState {
       if (this.analyticsData.currentData[poleId].length > this.analyticsData.maxDataPoints)
         this.analyticsData.currentData[poleId].shift();
     }
+    
+    // Trigger chart update if callback is set
+    if (this.analyticsUpdateCallback) {
+      this.analyticsUpdateCallback();
+    }
   }
   
   clearAnalyticsData() {
@@ -106,6 +118,11 @@ export class AppState {
       this.analyticsData.voltageData[p.id] = [];
       this.analyticsData.currentData[p.id] = [];
     });
+    
+    // Trigger chart update if callback is set
+    if (this.analyticsUpdateCallback) {
+      this.analyticsUpdateCallback();
+    }
   }
   
   reset() {
@@ -114,6 +131,11 @@ export class AppState {
     this.substationOnline = true;
     this.selectedPoleId = null;
     this.initializeState();
+    
+    // Trigger chart update if callback is set
+    if (this.analyticsUpdateCallback) {
+      this.analyticsUpdateCallback();
+    }
   }
 }
 

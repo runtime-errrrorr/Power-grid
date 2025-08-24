@@ -12,82 +12,134 @@ export class AnalyticsManager {
   }
   
   initializeAnalytics() {
-    const poleSelect = document.getElementById('selectedPole');
-    POLES.forEach(p => {
-      const option = document.createElement('option');
-      option.value = p.id;
-      option.textContent = p.name;
-      poleSelect.appendChild(option);
-    });
-    this.initializeCharts();
-    this.setupResizeHandler();
+    // Wait for DOM to be ready
+    setTimeout(() => {
+      const poleSelect = document.getElementById('selectedPole');
+      if (poleSelect) {
+        POLES.forEach(p => {
+          const option = document.createElement('option');
+          option.value = p.id;
+          option.textContent = p.name;
+          poleSelect.appendChild(option);
+        });
+      }
+      this.initializeCharts();
+      this.setupResizeHandler();
+    }, 100);
   }
   
   initializeCharts() {
-    const voltageCtx = document.getElementById('voltageChart').getContext('2d');
-    const currentCtx = document.getElementById('currentChart').getContext('2d');
-    const chartConfig = {
-      type: 'line',
-      options: {
-        responsive: true,
-        maintainAspectRatio: false,
-        animation: { duration: CHART_CONFIG.ANIMATION_DURATION },
-        scales: {
-          x: {
-            type: 'time',
-            time: {
-              unit: 'second',
-              displayFormats: { second: 'HH:mm:ss' }
+    try {
+      const voltageCanvas = document.getElementById('voltageChart');
+      const currentCanvas = document.getElementById('currentChart');
+      
+      if (!voltageCanvas || !currentCanvas) {
+        console.warn('Chart canvases not found, retrying in 200ms...');
+        setTimeout(() => this.initializeCharts(), 200);
+        return;
+      }
+      
+      const voltageCtx = voltageCanvas.getContext('2d');
+      const currentCtx = currentCanvas.getContext('2d');
+      
+      if (!voltageCtx || !currentCtx) {
+        console.error('Failed to get chart contexts');
+        return;
+      }
+      
+      const chartConfig = {
+        type: 'line',
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          animation: { duration: CHART_CONFIG.ANIMATION_DURATION },
+          scales: {
+            x: {
+              type: 'time',
+              time: {
+                unit: 'second',
+                displayFormats: { second: 'HH:mm:ss' }
+              },
+              ticks: { autoSkip: true, maxTicksLimit: CHART_CONFIG.MAX_TICKS }
             },
-            ticks: { autoSkip: true, maxTicksLimit: CHART_CONFIG.MAX_TICKS }
+            y: {
+              beginAtZero: true,
+              ticks: { color: '#ccc' },
+              grid: { color: 'rgba(255,255,255,0.1)' }
+            }
           },
-          y: {
-            beginAtZero: true,
-            ticks: { color: '#ccc' },
-            grid: { color: 'rgba(255,255,255,0.1)' }
+          plugins: {
+            legend: { labels: { color: '#ccc' } }
           }
-        },
-        plugins: {
-          legend: { labels: { color: '#ccc' } }
         }
-      }
-    };
+      };
 
-    this.voltageChart = new Chart(voltageCtx, {
-      ...chartConfig,
-      data: {
-        datasets: POLES.map(p => ({
-          label: `Pole ${p.id} Voltage`,
-          data: appState.getAnalyticsData().voltageData[p.id],
-          borderColor: '#00bfff',
-          borderWidth: 2,
-          tension: CHART_CONFIG.LINE_TENSION,
-          fill: false,
-          pointRadius: CHART_CONFIG.POINT_RADIUS
-        }))
-      }
-    });
+      this.voltageChart = new Chart(voltageCtx, {
+        ...chartConfig,
+        data: {
+          datasets: POLES.map(p => ({
+            label: `Pole ${p.id} Voltage`,
+            data: appState.getAnalyticsData().voltageData[p.id] || [],
+            borderColor: '#00bfff',
+            borderWidth: 2,
+            tension: CHART_CONFIG.LINE_TENSION,
+            fill: false,
+            pointRadius: CHART_CONFIG.POINT_RADIUS
+          }))
+        }
+      });
 
-    this.currentChart = new Chart(currentCtx, {
-      ...chartConfig,
-      data: {
-        datasets: POLES.map(p => ({
-          label: `Pole ${p.id} Current`,
-          data: appState.getAnalyticsData().currentData[p.id],
-          borderColor: '#ff9800',
-          borderWidth: 2,
-          tension: CHART_CONFIG.LINE_TENSION,
-          fill: false,
-          pointRadius: CHART_CONFIG.POINT_RADIUS
-        }))
-      }
-    });
+      this.currentChart = new Chart(currentCtx, {
+        ...chartConfig,
+        data: {
+          datasets: POLES.map(p => ({
+            label: `Pole ${p.id} Current`,
+            data: appState.getAnalyticsData().currentData[p.id] || [],
+            borderColor: '#ff9800',
+            borderWidth: 2,
+            tension: CHART_CONFIG.LINE_TENSION,
+            fill: false,
+            pointRadius: CHART_CONFIG.POINT_RADIUS
+          }))
+        }
+      });
+      
+      console.log('Charts initialized successfully');
+    } catch (error) {
+      console.error('Error initializing charts:', error);
+    }
   }
   
   updateCharts() {
     if (this.voltageChart && this.currentChart) {
+      // Update the chart data with current state
+      this.voltageChart.data.datasets.forEach((ds, index) => {
+        const poleId = POLES[index].id;
+        ds.data = appState.getAnalyticsData().voltageData[poleId] || [];
+      });
+      
+      this.currentChart.data.datasets.forEach((ds, index) => {
+        const poleId = POLES[index].id;
+        ds.data = appState.getAnalyticsData().currentData[poleId] || [];
+      });
+      
       this.voltageChart.update('none');
       this.currentChart.update('none');
+    }
+  }
+  
+  // Method to update charts when new data is added
+  updateChartsWithNewData() {
+    this.updateCharts();
+  }
+  
+  // Method to manually refresh charts (for testing)
+  refreshCharts() {
+    if (this.voltageChart && this.currentChart) {
+      this.updateCharts();
+      console.log('Charts refreshed manually');
+    } else {
+      console.warn('Charts not initialized yet');
     }
   }
   
