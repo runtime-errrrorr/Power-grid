@@ -28,7 +28,7 @@ export class MapManager {
         marker = L.marker(p.coords, {
           icon: L.divIcon({
             className: "substation-icon",
-            html: `<div class="triangle-marker"><img src="thunder.svg" class="thunder-icon" alt=""></div>`,
+            html: `<div class="triangle-marker"><img src="./assets/thunder.svg" class="thunder-icon" alt=""></div>`,
             iconSize: [44, 44]
           })
         }).addTo(this.map);

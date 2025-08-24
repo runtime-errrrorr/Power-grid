@@ -20,31 +20,31 @@
   <div id="poleInfo">Click a pole to see details.</div>
   <h3>Event Timeline</h3>
   <div id="eventLog"></div>
-  <button onclick="simulateFault()">⚡ Simulate Fault</button>
-  <button onclick="generateSampleData()">📊 Generate Sample Data</button>
-  <button onclick="reset()">🔄 Reset System</button>
-  <button onclick="showAnalytics()" id="viewGraphBtn">📈 View Graph</button>
-  <button onclick="toggleSubstation()" id="substationToggleBtn">🔌 Toggle Substation</button>
+  <button onclick="simulateFault()"> Simulate Fault</button>
+  <button onclick="generateSampleData()"> Generate Sample Data</button>
+  <button onclick="reset()"> Reset System</button>
+  <button onclick="showAnalytics()" id="viewGraphBtn"> View Graph</button>
+  <button onclick="toggleSubstation()" id="substationToggleBtn"> Toggle Substation</button>
 </div>
 
 <!-- Main Content Area -->
 <div id="mainContent">
   <header>
     <button id="hamburger-btn">☰</button>
-    <span>SCADA Grid Overview</span>
+    <span>Grid Overview</span>
   </header>
   <div id="map"></div>
   
   <!-- Analytics Block -->
   <div id="analyticsBlock" class="analytics-block">
     <div class="analytics-header">
-      <h3>📊 Real-time Analytics</h3>
+      <h3> Real-time Analytics</h3>
       <div class="analytics-controls">
         <select id="selectedPole" onchange="updateAnalytics()">
           <option value="all">All Poles</option>
         </select>
-        <button onclick="clearAnalyticsData()" title="Clear Analytics Data">🗑️</button>
-        <button onclick="toggleAnalytics()" id="toggleAnalytics">📉</button>
+        <button onclick="clearAnalyticsData()" title="Clear Analytics Data"></button>
+        <button onclick="toggleAnalytics()" id="toggleAnalytics"></button>
       </div>
     </div>
     <div class="analytics-content">
@@ -61,7 +61,7 @@
 
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script type="module" src="app.js"></script>
+<script type="module" src="./js/app.js"></script>
 <div id="alertBanner" class="alert-banner"></div>
 
 </body>

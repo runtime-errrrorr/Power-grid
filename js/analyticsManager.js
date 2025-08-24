@@ -181,10 +181,10 @@ export class AnalyticsManager {
     const btn = document.getElementById('viewGraphBtn');
     if (btn) {
       if (this.analyticsVisible) {
-        btn.textContent = "📉 Hide Graph";
+        btn.textContent = "Hide Graph";
         btn.onclick = () => this.toggleAnalytics();
       } else {
-        btn.textContent = "📈 View Graph";
+        btn.textContent = "View Graph";
         btn.onclick = () => this.showAnalytics();
       }
     }

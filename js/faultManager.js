@@ -36,7 +36,7 @@ export class FaultManager {
     this.mapManager.removeOverUnderClasses();
     this.mapManager.removeNeutralClasses();
     this.mapManager.setPoleColor(poleId, COLOR.FAULT, { includeLines: false });
-    this.mapManager.setPoleFaultIcon(poleId, "caution.svg");
+    this.mapManager.setPoleFaultIcon(poleId, "./assets/caution.svg");
     
     const down = downstreamIds(poleId);
     down.forEach(id => this.mapManager.setPoleColor(id, COLOR.OFF));
@@ -61,7 +61,7 @@ export class FaultManager {
     this.mapManager.clearAllColors();
     this.mapManager.removeOverUnderClasses();
     this.mapManager.clearAllFaultIcons();
-    this.mapManager.setPoleFaultIcon(faultPoleId, "caution.svg");
+    this.mapManager.setPoleFaultIcon(faultPoleId, "./assets/caution.svg");
 
     const lineClass = (type === "Overvoltage") ? "overvoltage-line" : "undervoltage-line";
     const poleClass = (type === "Overvoltage") ? "overvoltage-pole" : "undervoltage-pole";
