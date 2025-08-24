@@ -47,10 +47,10 @@ export class MQTTManager {
     // Parse messages in format: $$P01,S01,0.0,0.04,0##
     // Format: $$PoleID,SubstationID,Voltage,Current,ErrorCode##
     
-    if (!message.startsWith('$$') || !message.endsWith('##')) {
-      console.warn("Invalid pole message format:", message);
-      return null;
-    }
+    // if (!message.startsWith('$$') || !message.endsWith('##')) {
+    //   console.warn("Invalid pole message format:", message);
+    //   return null;
+    // }
     
     // Remove $$ and ## and split by comma
     const content = message.slice(2, -2);
