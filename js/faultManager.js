@@ -2,7 +2,7 @@
 
 import { COLOR, SUBSTATION_ID } from './config.js';
 import { appState } from './state.js';
-import { downstreamIds, getPoleMarkerEl, getLineEl, addClass, removeClass, logEvent, showAlert, updateSystemStatus } from './utils.js';
+import { downstreamIds, getPoleMarkerEl, getLineEl, addClass, removeClass, logEvent, showAlert, clearAlert, updateSystemStatus } from './utils.js';
 
 export class FaultManager {
   constructor(mapManager) {
@@ -14,7 +14,7 @@ export class FaultManager {
     this.uiManager = uiManager;
   }
   
-  updateSubstationStatus(data) {
+  updateSubstationStatus(data) { 
     // Handle substation status updates from MQTT
     // Expected JSON format: { substation_id, voltage, current, fault_code, fault_type, status, breaker_status, timestamp }
     
@@ -90,6 +90,7 @@ export class FaultManager {
       if (!anyActive) {
         this.mapManager.resetAllVisuals();
         updateSystemStatus("OK");
+        clearAlert();
       }
     }
     
@@ -283,6 +284,7 @@ export class FaultManager {
         updateSystemStatus("OK");
         const eventLogEl = document.getElementById('eventLog');
         logEvent(eventLogEl, "All clear — system normal.");
+        import('./utils.js').then(utils => utils.clearAlert());
       } else {
         const eventLogEl = document.getElementById('eventLog');
         logEvent(eventLogEl, `OK @ Pole ${pole_id}`);

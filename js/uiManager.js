@@ -100,6 +100,8 @@ export class UIManager {
     const eventLogEl = document.getElementById('eventLog');
     eventLogEl.innerHTML = "";
     logEvent(eventLogEl, "System Reset");
+
+    import('./utils.js').then(utils => utils.clearAlert());
   }
   
   showAnalytics() {

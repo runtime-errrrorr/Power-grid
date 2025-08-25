@@ -39,17 +39,28 @@ export function getLineEl(lineObj) {
 }
 
 // Alert and Logging Utilities
+// Persistent alert banner: shows until explicitly cleared.
+// Debounces identical repeating messages to avoid re-renders.
 export function showAlert(msg) {
   const banner = getElement("alertBanner");
   if (!banner) return;
+  // Avoid re-writing if same message is already shown
+  const currentMsg = banner.getAttribute('data-msg') || '';
+  const isVisible = banner.classList.contains('show');
+  if (isVisible && currentMsg === String(msg)) return;
+  banner.setAttribute('data-msg', String(msg));
   banner.innerText = msg;
   banner.style.display = "block";
   void banner.offsetWidth;
   banner.classList.add("show");
-  setTimeout(() => {
-    banner.classList.remove("show");
-    setTimeout(() => (banner.style.display = "none"), 500);
-  }, 5000);
+}
+
+export function clearAlert() {
+  const banner = getElement("alertBanner");
+  if (!banner) return;
+  banner.classList.remove("show");
+  banner.removeAttribute('data-msg');
+  setTimeout(() => (banner.style.display = "none"), 300);
 }
 
 export function logEvent(eventLogEl, msg, type = 'info', data = null) {

@@ -99,7 +99,7 @@ export class MQTTManager {
     }
     
     return {
-      pole_id: poleId,
+      pole_id: 4,
       substation_id: substationId,
       voltage: voltage,
       current: current,

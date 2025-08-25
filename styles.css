@@ -40,7 +40,7 @@ body {
   background: var(--panel);
   border-right: 1px solid var(--border);
   padding: 16px;
-  overflow-y: auto;
+  overflow-y: hidden; /* prevent overlapping; we'll control children */
   display: flex;
   flex-direction: column;
   z-index: 10;
@@ -69,14 +69,15 @@ body {
   border-radius: 10px;
   min-height: 100px;
   border: 1px solid var(--border);
+  flex-shrink: 0; /* keep fixed height; don't let it collapse */
 }
 
 #eventLog {
   background: #111419;
   padding: 8px;
   font-size: 12px;
-  flex-grow: 1;
-  overflow-y: auto;
+  flex: 1 1 auto;       /* take remaining space */
+  overflow-y: auto;     /* scroll inside instead of overlapping */
   margin-top: 8px;
   border-radius: 10px;
   border: 1px solid var(--border);

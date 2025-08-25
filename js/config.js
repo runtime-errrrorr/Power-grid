@@ -27,10 +27,10 @@ export const ANALYTICS_MAX_DATA_POINTS = 50;
 
 // Pole Data
 export const POLES = [
-  { id: 1, name: "Pole 1", coords: [8.561121456920256, 76.857288741109] },
-  { id: 2, name: "Pole 2", coords: [8.561406528979926, 76.85769082321161] },
-  { id: 3, name: "Pole 3", coords: [8.561952872142548, 76.85843646112221] },
-  { id: 4, name: "Pole 4", coords: [8.562446202520935, 76.8590480003807] },
+  { id: 4, name: "Pole 4", coords: [8.561121456920256, 76.857288741109] },
+  { id: 3, name: "Pole 3", coords: [8.561406528979926, 76.85769082321161] },
+  { id: 2, name: "Pole 2", coords: [8.561952872142548, 76.85843646112221] },
+  { id: 1, name: "Pole 1", coords: [8.562446202520935, 76.8590480003807] },
   { id: SUBSTATION_ID, name: "Substation", coords: [8.56333738027111, 76.8599009400019] }
 ];
 
@@ -39,7 +39,7 @@ export const MQTT_CONFIG = {
   BROKER_URL: "wss://broker.hivemq.com:8884/mqtt",
   TOPICS: {
     SUBSTATION: "scada/grid/substation1/status",
-    POLES: "scada/grid/pole/1",
+    POLES: "scada/grid/pole1/",
     COMMANDS: "scada/grid/substation1/recharge"
   }
 };
