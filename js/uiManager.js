@@ -24,7 +24,7 @@ export class UIManager {
     window.generateSampleData = () => this.generateSampleData();
     window.reset = () => this.reset();
     window.showAnalytics = () => this.showAnalytics();
-    window.toggleSubstation = () => this.toggleSubstation();
+    window.turnOnSubstation = () => this.turnOnSubstation();
     window.showPole = (pole) => this.showPole(pole);
     window.updateAnalytics = () => this.updateAnalytics();
     window.clearAnalyticsData = () => this.clearAnalyticsData();
@@ -58,7 +58,9 @@ export class UIManager {
   }
   
   simulateFault() {
-    const id = appState.getSelectedPoleId() || 4;
+    const selectedId = appState.getSelectedPoleId();
+    const id = selectedId || SUBSTATION_ID; // Default to substation if no pole selected
+    
     const fake = {
       pole_id: id,
       status: "FAULT",
@@ -91,13 +93,8 @@ export class UIManager {
     this.mapManager.resetAllVisuals();
     appState.reset();
     
-    // Reset substation button state
-    const substationBtn = document.getElementById('substationToggleBtn');
-    if (substationBtn) {
-      substationBtn.textContent = "🔌 Toggle Substation";
-      substationBtn.style.background = "rgba(255, 255, 255, 0.04)";
-      substationBtn.style.borderColor = "rgba(255, 255, 255, 0.12)";
-    }
+    // Update substation button visibility
+    this.updateSubstationButtonVisibility();
     
     updateSystemStatus("OK");
     const eventLogEl = document.getElementById('eventLog');
@@ -109,51 +106,43 @@ export class UIManager {
     this.analyticsManager.showAnalytics();
   }
   
-  toggleSubstation() {
-    const currentStatus = appState.getSubstationOnline();
-    const newStatus = !currentStatus;
-    appState.setSubstationOnline(newStatus);
+  turnOnSubstation() {
+    // Send MQTT message to turn on substation (just send 'r' command)
+    this.mqttManager.publishSubstationToggle("ONLINE");
     
-    // Update button text and appearance
+    // Log the command sent
+    const eventLogEl = document.getElementById('eventLog');
+    logEvent(eventLogEl, "Turn on substation command sent", "info");
+    showAlert("📡 Turn on substation command sent");
+    
+    // Don't change visual state - wait for actual substation response
+    // The visual state will be updated when the substation sends OK status
+  }
+  
+  updateSubstationButtonVisibility() {
     const btn = document.getElementById('substationToggleBtn');
-    if (btn) {
-      if (newStatus) {
-        btn.textContent = "🔌 Toggle Substation";
-        btn.style.background = "rgba(255, 255, 255, 0.04)";
-        btn.style.borderColor = "rgba(255, 255, 255, 0.12)";
-      } else {
-        btn.textContent = "⚡ Substation OFF";
-        btn.style.background = "rgba(244, 67, 54, 0.2)";
-        btn.style.borderColor = "#f44336";
-      }
-    }
+    if (!btn) return;
     
-    // Send MQTT message
-    this.mqttManager.publishSubstationToggle(newStatus ? "ONLINE" : "OFFLINE");
+    const substationData = appState.getPoleData()[SUBSTATION_ID];
     
-    // Update visual state
-    if (newStatus) {
-      // Bring substation back online
-      this.mapManager.setPoleColor(SUBSTATION_ID, COLOR.OK, { includeLines: false });
-      [1, 2, 3, 4].forEach(id => this.mapManager.setPoleColor(id, COLOR.OK));
-      const lines = appState.getLines();
-      lines.forEach(Lobj => Lobj.line.setStyle({ color: COLOR.OK }));
-      
-      const eventLogEl = document.getElementById('eventLog');
-      logEvent(eventLogEl, "Substation brought back online", "info");
-      showAlert("✅ Substation brought back online");
-      updateSystemStatus("OK");
+    // Check for fault conditions - handle both old and new formats
+    const isSubstationOffline = substationData && (
+      substationData.status === "CRITICAL" || 
+      substationData.status === "FAULT" ||
+      (substationData.fault_type && 
+       substationData.fault_type !== "NIL" && 
+       substationData.fault_type !== "Normal")
+    );
+    
+    if (isSubstationOffline) {
+      // Show button when substation is offline
+      btn.style.display = 'block';
+      btn.textContent = "⚡ Turn On Substation";
+      btn.style.background = "rgba(244, 67, 54, 0.2)";
+      btn.style.borderColor = "#f44336";
     } else {
-      // Take substation offline
-      this.mapManager.setPoleColor(SUBSTATION_ID, COLOR.OFF, { includeLines: false });
-      [1, 2, 3, 4].forEach(id => this.mapManager.setPoleColor(id, COLOR.OFF));
-      const lines = appState.getLines();
-      lines.forEach(Lobj => Lobj.line.setStyle({ color: COLOR.OFF }));
-      
-      const eventLogEl = document.getElementById('eventLog');
-      logEvent(eventLogEl, "Substation taken offline", "warn");
-      showAlert("⚠️ Substation taken offline");
-      updateSystemStatus("WARNING");
+      // Hide button when substation is online
+      btn.style.display = 'none';
     }
   }
   
@@ -173,12 +162,7 @@ export class UIManager {
     // Initialize view graph button state
     this.analyticsManager.updateViewGraphButton();
     
-    // Initialize substation button state
-    const substationBtn = document.getElementById('substationToggleBtn');
-    if (substationBtn) {
-      substationBtn.textContent = "🔌 Toggle Substation";
-      substationBtn.style.background = "rgba(255, 255, 255, 0.04)";
-      substationBtn.style.borderColor = "rgba(255, 255, 255, 0.12)";
-    }
+    // Initialize substation button visibility
+    this.updateSubstationButtonVisibility();
   }
 }

@@ -40,7 +40,7 @@ export const MQTT_CONFIG = {
   TOPICS: {
     SUBSTATION: "scada/grid/substation1/status",
     POLES: "scada/grid/pole/1",
-    COMMANDS: "scada/commands/substation"
+    COMMANDS: "scada/grid/substation1/recharge"
   }
 };
 

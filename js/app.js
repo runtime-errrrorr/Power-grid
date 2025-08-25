@@ -32,6 +32,9 @@ export class SCADAApp {
         this.mqttManager
       );
       
+      // Set UI manager reference in fault manager for button updates
+      this.faultManager.setUIManager(this.uiManager);
+      
       // Connect analytics callback to state manager
       appState.setAnalyticsUpdateCallback(() => {
         this.analyticsManager.updateChartsWithNewData();

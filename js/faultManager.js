@@ -7,17 +7,24 @@ import { downstreamIds, getPoleMarkerEl, getLineEl, addClass, removeClass, logEv
 export class FaultManager {
   constructor(mapManager) {
     this.mapManager = mapManager;
+    this.uiManager = null;
+  }
+  
+  setUIManager(uiManager) {
+    this.uiManager = uiManager;
   }
   
   updateSubstationStatus(data) {
     // Handle substation status updates from MQTT
-    // Expected JSON format: { voltage, current, status, fault_code }
+    // Expected JSON format: { substation_id, voltage, current, fault_code, fault_type, status, breaker_status, timestamp }
     
     const substationId = SUBSTATION_ID;
     const status = (data.status || "OK").toUpperCase();
     const voltage = parseFloat(data.voltage) || 0;
     const current = parseFloat(data.current) || 0;
     const faultCode = data.fault_code || 0;
+    const faultType = (data.fault_type || "NIL").toUpperCase();
+    const breakerStatus = data.breaker_status || "CLOSED";
     
     // Update substation data in state
     appState.updatePoleData(substationId, {
@@ -26,10 +33,13 @@ export class FaultManager {
       current: current,
       status: status,
       fault_code: faultCode,
+      fault_type: faultType,
+      breaker_status: breakerStatus,
       timestamp: Date.now()
     });
     
-    if (status === "FAULT") {
+    // Handle different fault types and statuses
+    if (status === "CRITICAL" || faultType !== "NIL") {
       // Substation fault affects entire network
       this.mapManager.resetAllVisuals();
       this.mapManager.setPoleColor(substationId, COLOR.FAULT, { includeLines: false });
@@ -41,19 +51,33 @@ export class FaultManager {
       const lines = appState.getLines();
       lines.forEach(Lobj => Lobj.line.setStyle({ color: COLOR.OFF }));
       
+      // Determine fault message based on fault type
+      let faultMessage = "Substation fault — all poles disconnected";
+      if (faultType === "LINE TO LINE") {
+        faultMessage = "Substation line-to-line fault — all poles disconnected";
+      } else if (faultType === "LINE TO GROUND") {
+        faultMessage = "Substation line-to-ground fault — all poles disconnected";
+      }
+      
       const eventLogEl = document.getElementById('eventLog');
-      logEvent(eventLogEl, "Substation fault — all poles disconnected", "fault", data);
-      showAlert("⚡ Substation fault — all poles disconnected");
+      logEvent(eventLogEl, faultMessage, "fault", data);
+      showAlert(`⚡ ${faultMessage}`);
       updateSystemStatus("FAULT");
+      
+      // Update substation online state
+      appState.setSubstationOnline(false);
     } else if (status === "WARNING") {
       this.mapManager.setPoleColor(substationId, COLOR.WARNING, { borderOnly: true });
       const eventLogEl = document.getElementById('eventLog');
       logEvent(eventLogEl, "Substation warning", "warn", data);
       updateSystemStatus("WARNING");
     } else {
-      // OK status
+      // OK status - normal working condition
       this.mapManager.setPoleColor(substationId, COLOR.OK);
       this.mapManager.clearPoleFaultIcon(substationId);
+      
+      // Update substation online state
+      appState.setSubstationOnline(true);
       
       // Check if we should reset network visuals
       const poleData = appState.getPoleData();
@@ -72,6 +96,11 @@ export class FaultManager {
     // Update analytics for substation
     if (!isNaN(voltage) || !isNaN(current)) {
       appState.addAnalyticsData(substationId, voltage, current);
+    }
+    
+    // Update UI button visibility if UI manager is available
+    if (this.uiManager && this.uiManager.updateSubstationButtonVisibility) {
+      this.uiManager.updateSubstationButtonVisibility();
     }
   }
   
@@ -188,6 +217,15 @@ export class FaultManager {
       logEvent(eventLogEl, "Substation offline — all poles disconnected", "fault", data);
       showAlert("⚡ Substation offline — all poles disconnected");
       updateSystemStatus("FAULT");
+      
+      // Update substation online state
+      appState.setSubstationOnline(false);
+      
+      // Update UI button visibility if UI manager is available
+      if (this.uiManager && this.uiManager.updateSubstationButtonVisibility) {
+        this.uiManager.updateSubstationButtonVisibility();
+      }
+      
       return;
     }
 

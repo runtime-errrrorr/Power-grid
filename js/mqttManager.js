@@ -111,14 +111,7 @@ export class MQTTManager {
   }
   
   publishSubstationToggle(status) {
-    const message = {
-      command: "substation_toggle",
-      substation_id: SUBSTATION_ID,
-      status: status,
-      timestamp: Date.now()
-    };
-    
-    this.client.publish(MQTT_CONFIG.TOPICS.COMMANDS, JSON.stringify(message));
+    this.client.publish(MQTT_CONFIG.TOPICS.COMMANDS, 'r');
   }
   
   getClient() {
