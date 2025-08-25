@@ -1,6 +1,6 @@
 // ========================== Utility Functions ==========================
 
-import { SUBSTATION_ID } from './config.js';
+import { SUBSTATION_ID, POLES } from './config.js';
 
 // DOM Utilities
 export function getElement(id) {
@@ -17,9 +17,11 @@ export function removeClass(el, cls) {
 
 // Pole Utilities
 export function downstreamIds(fromId) {
-  const ids = [];
-  for (let i = fromId - 1; i >= 1; i--) ids.push(i);
-  return ids;
+  // Determine downstream as all poles with a GREATER numeric id (exclude substation)
+  const allPoleIds = POLES
+    .map(p => p.id)
+    .filter(id => id !== SUBSTATION_ID);
+  return allPoleIds.filter(id => id > fromId).sort((a, b) => a - b);
 }
 
 export function getPoleMarkerEl(markers, id) {

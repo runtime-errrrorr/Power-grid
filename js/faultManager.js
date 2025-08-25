@@ -1,6 +1,6 @@
 // ========================== Fault Manager ==========================
 
-import { COLOR, SUBSTATION_ID } from './config.js';
+import { COLOR, SUBSTATION_ID, POLES } from './config.js';
 import { appState } from './state.js';
 import { downstreamIds, getPoleMarkerEl, getLineEl, addClass, removeClass, logEvent, showAlert, clearAlert, updateSystemStatus } from './utils.js';
 
@@ -44,8 +44,8 @@ export class FaultManager {
       this.mapManager.resetAllVisuals();
       this.mapManager.setPoleColor(substationId, COLOR.FAULT, { includeLines: false });
       
-      // Turn off all downstream poles
-      [1, 2, 3, 4].forEach(id => this.mapManager.setPoleColor(id, COLOR.OFF));
+      // Turn off all non-substation poles based on configured order
+      POLES.filter(p => p.id !== substationId).forEach(p => this.mapManager.setPoleColor(p.id, COLOR.OFF));
       
       // Turn off all lines
       const lines = appState.getLines();
@@ -152,6 +152,60 @@ export class FaultManager {
     updateSystemStatus("FAULT");
   }
   
+  // Neutral Break (code 10): fault pole and downstream yellow; lines to downstream yellow
+  applyNeutralBreakWarning(poleId) {
+    this.mapManager.removeOverUnderClasses();
+    this.mapManager.removeNeutralClasses();
+    this.mapManager.clearPoleFaultIcon(poleId);
+
+    // Fault pole yellow
+    this.mapManager.setPoleColor(poleId, COLOR.WARNING, { includeLines: false });
+
+    const down = downstreamIds(poleId);
+    // Downstream poles yellow
+    down.forEach(id => this.mapManager.setPoleColor(id, COLOR.WARNING));
+
+    // Lines to downstream yellow
+    const lines = appState.getLines();
+    lines.forEach(Lobj => {
+      if (Lobj.ids.some(id => down.includes(id))) {
+        Lobj.line.setStyle({ color: COLOR.WARNING });
+      } else {
+        Lobj.line.setStyle({ color: COLOR.OK });
+      }
+    });
+
+    const eventLogEl = document.getElementById('eventLog');
+    logEvent(eventLogEl, `Neutral Break at Pole ${poleId}`, "warn");
+    showAlert(`⚠️ Neutral Break at Pole ${poleId}`);
+    updateSystemStatus("WARNING");
+  }
+
+  // Line Fault (code 27): fault pole red with caution, downstream greyed out (OFF); lines grey
+  applyLineFaultCritical(poleId) {
+    this.mapManager.removeOverUnderClasses();
+    this.mapManager.removeNeutralClasses();
+    this.mapManager.setPoleColor(poleId, COLOR.FAULT, { includeLines: false });
+    this.mapManager.setPoleFaultIcon(poleId, "./assets/caution.svg");
+
+    const down = downstreamIds(poleId);
+    down.forEach(id => this.mapManager.setPoleColor(id, COLOR.OFF));
+
+    const lines = appState.getLines();
+    lines.forEach(Lobj => {
+      if (Lobj.ids.some(id => down.includes(id))) {
+        Lobj.line.setStyle({ color: COLOR.OFF });
+      } else {
+        Lobj.line.setStyle({ color: COLOR.OK });
+      }
+    });
+
+    const eventLogEl = document.getElementById('eventLog');
+    logEvent(eventLogEl, `Line Fault at Pole ${poleId}`, "fault");
+    showAlert(`⚡ Line Fault at Pole ${poleId}`);
+    updateSystemStatus("FAULT");
+  }
+  
   applyOverUnderGlobal(type, faultPoleId, numericVoltage) {
     this.mapManager.removeNeutralClasses();
     this.mapManager.clearAllColors();
@@ -210,7 +264,7 @@ export class FaultManager {
     if (pole_id === SUBSTATION_ID && status === "FAULT") {
       this.mapManager.resetAllVisuals();
       this.mapManager.setPoleColor(SUBSTATION_ID, COLOR.FAULT, { includeLines: false });
-      [1,2,3,4].forEach(id => this.mapManager.setPoleColor(id, COLOR.OFF));
+      POLES.filter(p => p.id !== SUBSTATION_ID).forEach(p => this.mapManager.setPoleColor(p.id, COLOR.OFF));
       const lines = appState.getLines();
       lines.forEach(Lobj => Lobj.line.setStyle({ color: COLOR.OFF }));
       
@@ -233,15 +287,18 @@ export class FaultManager {
     if (status === "FAULT") {
       switch (normalizedType) {
         case "short":
-        case "line fault":
           this.applyShortOrLTG(pole_id, "Short Circuit Fault");
           break;
         case "linetoground":
           this.applyShortOrLTG(pole_id, "Line-to-Ground Fault");
           break;
+        case "line fault":
+          this.applyLineFaultCritical(pole_id);
+          break;
         case "neutralfault":
         case "neutral break":
-          this.applyNeutralFault(pole_id);
+          // For neutral break, fault and downstream yellow
+          this.applyNeutralBreakWarning(pole_id);
           break;
         case "overvoltage":
           this.mapManager.resetAllVisuals();
